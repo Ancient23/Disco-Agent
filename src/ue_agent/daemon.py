@@ -132,25 +132,56 @@ async def run_daemon(config: AgentConfig, repo_root: str):
         await queue.close()
 
 
+def _find_repo_root() -> Path:
+    """Find the repo root by looking for adw-agent/ with config files.
+
+    Search order:
+    1. Current working directory IS adw-agent/ (cwd has config.toml or pyproject.toml)
+    2. Current working directory contains adw-agent/
+    3. Walk up from cwd looking for adw-agent/
+    """
+    cwd = Path.cwd()
+
+    # cwd is the adw-agent directory itself
+    if (cwd / "pyproject.toml").exists() and (cwd / "src" / "ue_agent").exists():
+        return cwd.parent
+
+    # cwd contains adw-agent/
+    if (cwd / "adw-agent" / "pyproject.toml").exists():
+        return cwd
+
+    # Walk up from cwd
+    for parent in cwd.parents:
+        if (parent / "adw-agent" / "pyproject.toml").exists():
+            return parent
+
+    # Fallback: assume cwd is repo root
+    return cwd
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
 
-    repo_root = str(Path(__file__).resolve().parent.parent.parent.parent)
+    repo_root = _find_repo_root()
+    agent_dir = repo_root / "adw-agent"
 
     subcommand = sys.argv[1] if len(sys.argv) > 1 else "start"
 
     config = load_config(
-        config_path=Path(repo_root) / "adw-agent" / "config.toml",
-        env_path=Path(repo_root) / "adw-agent" / ".env",
+        config_path=agent_dir / "config.toml",
+        env_path=agent_dir / ".env",
     )
+
+    logger.info(f"Repo root: {repo_root}")
+    logger.info(f"Config: {agent_dir / 'config.toml'}")
 
     if subcommand == "queue":
         asyncio.run(show_queue(config))
     elif subcommand == "start":
-        asyncio.run(run_daemon(config, repo_root))
+        asyncio.run(run_daemon(config, str(repo_root)))
     else:
         print(f"Unknown subcommand: {subcommand}")
         print("Usage: ue-agent [start|queue]")
