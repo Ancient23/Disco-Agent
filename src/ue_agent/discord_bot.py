@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
 import discord
 
 from ue_agent.config import AgentConfig
 from ue_agent.queue import TaskQueue
-from ue_agent.session_history import format_session_for_prompt, load_recent_sessions, search_sessions
+from ue_agent.session_history import format_session_for_prompt, get_history_dir, load_recent_sessions, search_sessions
 from ue_agent.utils import truncate_for_discord
 from ue_agent.workflows.base import WorkflowResult
 
@@ -133,7 +132,7 @@ def create_bot(config: AgentConfig, queue: TaskQueue, repo_root: str = "") -> di
 
     required_role = config.discord.required_role
     command_channel_id = config.discord.command_channel_id
-    history_dir = str(Path(repo_root) / "adw-agent" / "chat_history") if repo_root else "chat_history"
+    history_dir = get_history_dir(repo_root) if repo_root else "chat_history"
 
     @bot.event
     async def on_ready():

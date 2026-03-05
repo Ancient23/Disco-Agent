@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import ClaudeAgentOptions, query
@@ -10,7 +9,7 @@ from claude_agent_sdk import ClaudeAgentOptions, query
 from ue_agent.config import BudgetConfig
 from ue_agent.cost_tracker import CostTracker
 from ue_agent.queue import TaskQueue
-from ue_agent.session_history import build_history_context, save_session
+from ue_agent.session_history import get_history_dir, build_history_context, save_session
 from ue_agent.workflows import register
 from ue_agent.workflows.base import BaseWorkflow, Notifier, WorkflowResult
 
@@ -30,7 +29,7 @@ class AnalyzeWorkflow(BaseWorkflow):
         super().__init__(task=task, queue=queue, notifier=notifier)
         self.cost_tracker = CostTracker(budget_config.analyze_warning_usd)
         self.repo_root = repo_root
-        self.history_dir = str(Path(repo_root) / "adw-agent" / "chat_history")
+        self.history_dir = get_history_dir(repo_root)
 
     async def execute(self) -> WorkflowResult:
         params = json.loads(self.task["params"]) if isinstance(self.task["params"], str) else self.task["params"]

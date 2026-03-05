@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 _DEFAULT_DIR_NAME = "chat_history"
 
 
+def get_history_dir(repo_root: str) -> str:
+    """Canonical path for the session history directory."""
+    return str(Path(repo_root) / "adw-agent" / "chat_history")
+
+
 def _history_dir(base_dir: str | Path | None = None) -> Path:
     """Return (and lazily create) the history directory."""
     if base_dir is not None:

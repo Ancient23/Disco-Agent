@@ -1,13 +1,11 @@
 import json
-import os
-import tempfile
-from pathlib import Path
 
 import pytest
 
 from ue_agent.session_history import (
     build_history_context,
     format_session_for_prompt,
+    get_history_dir,
     load_all_sessions,
     load_recent_sessions,
     save_session,
@@ -160,3 +158,10 @@ class TestParseHistoryCommand:
         cmd = parse_command('!history "frame 200"')
         assert cmd is not None
         assert cmd["params"]["search"] == "frame 200"
+
+
+class TestGetHistoryDir:
+    def test_returns_canonical_path(self):
+        result = get_history_dir("/some/repo")
+        assert result.replace("\\", "/").endswith("adw-agent/chat_history")
+        assert result.replace("\\", "/").startswith("/some/repo")
