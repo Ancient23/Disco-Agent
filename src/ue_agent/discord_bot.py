@@ -146,7 +146,9 @@ def create_bot(config: AgentConfig, queue: TaskQueue, repo_root: str = "") -> di
         if command_channel_id and str(message.channel.id) != command_channel_id:
             return
 
-        if required_role and isinstance(message.author, discord.Member):
+        if required_role:
+            if not isinstance(message.author, discord.Member):
+                return
             role_names = [r.name for r in message.author.roles]
             if required_role not in role_names:
                 return
