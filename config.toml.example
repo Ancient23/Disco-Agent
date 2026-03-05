@@ -1,0 +1,27 @@
+[general]
+poll_interval_seconds = 10
+db_path = "tasks.db"
+
+[ue]
+engine_path = "C:/Program Files/Epic Games/UE_5.3/Engine"
+project_path = "Proj/CitySample/CitySample.uproject"
+platform = "Win64"
+build_flags = ["-cook", "-stage", "-pak", "-unattended", "-nullrhi"]
+
+[discord]
+command_channel_id = ""
+required_role = "BuildOps"
+
+[conductor]
+conductor_agent_path = "conductor-agent"
+
+[budgets]
+compile_warning_usd = 5.0
+package_warning_usd = 5.0
+submit_warning_usd = 2.0
+analyze_warning_usd = 3.0
+custom_warning_usd = 5.0
+
+[compile]
+max_retries = 3
+error_tail_lines = 200
