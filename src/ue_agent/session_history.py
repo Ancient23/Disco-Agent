@@ -40,7 +40,6 @@ def save_session(
     cost_usd: float,
     requested_by: str,
     discord_channel_id: str,
-    extra: dict[str, Any] | None = None,
     history_dir: str | Path | None = None,
 ) -> Path:
     """Write a completed session to disk and return the file path.
@@ -58,7 +57,6 @@ def save_session(
         "requested_by": requested_by,
         "discord_channel_id": discord_channel_id,
         "timestamp": now.isoformat(),
-        "extra": extra or {},
     }
 
     # Filename: <timestamp>_task<id>.json  (sortable by time)
