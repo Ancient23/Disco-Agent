@@ -95,9 +95,19 @@ def load_recent_sessions(
     n: int = 10,
     history_dir: str | Path | None = None,
 ) -> list[dict[str, Any]]:
-    """Return the *n* most recent sessions (newest-first)."""
-    all_sessions = load_all_sessions(history_dir)
-    return list(reversed(all_sessions[-n:]))
+    """Return the *n* most recent sessions (newest-first).
+
+    Only reads the last *n* files rather than loading the entire history.
+    """
+    hdir = _history_dir(history_dir)
+    files = sorted(hdir.glob("*.json"))[-n:]
+    sessions: list[dict[str, Any]] = []
+    for fp in reversed(files):
+        try:
+            sessions.append(json.loads(fp.read_text(encoding="utf-8")))
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Skipping corrupt history file %s: %s", fp, exc)
+    return sessions
 
 
 def search_sessions(
