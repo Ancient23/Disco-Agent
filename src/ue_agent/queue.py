@@ -67,22 +67,26 @@ class TaskQueue:
 
     async def fetch_next(self) -> dict | None:
         assert self._db
+        now = self._now()
         cursor = await self._db.execute(
-            "SELECT * FROM tasks WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1"
+            """
+            UPDATE tasks
+            SET status = 'running', started_at = ?
+            WHERE id = (
+                SELECT id FROM tasks
+                WHERE status = 'pending'
+                ORDER BY created_at ASC
+                LIMIT 1
+            )
+            RETURNING *
+            """,
+            (now,),
         )
         row = await cursor.fetchone()
+        await self._db.commit()
         if row is None:
             return None
-        task = dict(row)
-        now = self._now()
-        await self._db.execute(
-            "UPDATE tasks SET status = 'running', started_at = ? WHERE id = ?",
-            (now, task["id"]),
-        )
-        await self._db.commit()
-        task["status"] = "running"
-        task["started_at"] = now
-        return task
+        return dict(row)
 
     async def complete(self, task_id: int, result: dict) -> None:
         assert self._db
