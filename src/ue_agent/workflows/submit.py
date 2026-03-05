@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import ClaudeAgentOptions, query
@@ -43,7 +44,7 @@ class SubmitWorkflow(BaseWorkflow):
             f"Report the submission result."
         )
 
-        conductor_cwd = f"{self.repo_root}/{self.conductor_config.conductor_agent_path}"
+        conductor_cwd = str(Path(self.repo_root) / self.conductor_config.conductor_agent_path)
 
         sdk_output = ""
         async for message in query(
