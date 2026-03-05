@@ -58,6 +58,12 @@ def test_parse_cancel_command():
     assert cmd["workflow"] == "__cancel"
 
 
+def test_parse_help_command():
+    cmd = parse_command("!help")
+    assert cmd is not None
+    assert cmd["workflow"] == "__help"
+
+
 def test_parse_unknown_command():
     cmd = parse_command("!unknown something")
     assert cmd is None

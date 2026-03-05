@@ -85,6 +85,9 @@ def parse_command(text: str) -> dict[str, Any] | None:
     if cmd == "!cancel":
         return {"workflow": "__cancel", "project": "", "platform": "", "params": {}}
 
+    if cmd == "!help":
+        return {"workflow": "__help", "project": "", "platform": "", "params": {}}
+
     return None
 
 
@@ -139,6 +142,31 @@ def create_bot(config: AgentConfig, queue: TaskQueue) -> discord.Client:
 
         parsed = parse_command(message.content)
         if parsed is None:
+            return
+
+        if parsed["workflow"] == "__help":
+            help_text = (
+                "**UE Build Agent Commands**\n"
+                "```\n"
+                "!build <project> [platform]     Compile via RunUAT (auto-fix on failure)\n"
+                "!package <project> [platform]   Package (compile + cook + stage + pak)\n"
+                "!submit <project> [options]     Submit Conductor render job\n"
+                '!analyze "<question>"            Research the codebase (read-only)\n'
+                '!run "<prompt>"                  Freeform Claude session (read/write)\n'
+                "!status                         Show task queue\n"
+                "!cancel                         Cancel all active tasks\n"
+                "!help                           Show this message\n"
+                "```\n"
+                "**Examples**\n"
+                "```\n"
+                "!build CitySample\n"
+                "!package CitySample Win64\n"
+                "!submit CitySample --dry-run\n"
+                '!analyze "why does the 4D capture crash on frame 200"\n'
+                '!run "add error handling to s3_upload.py"\n'
+                "```"
+            )
+            await message.channel.send(help_text)
             return
 
         if parsed["workflow"] == "__status":
