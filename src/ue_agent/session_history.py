@@ -43,7 +43,10 @@ def save_session(
     extra: dict[str, Any] | None = None,
     history_dir: str | Path | None = None,
 ) -> Path:
-    """Write a completed session to disk and return the file path."""
+    """Write a completed session to disk and return the file path.
+
+    This is best-effort — a write failure is logged but will not raise.
+    """
     hdir = _history_dir(history_dir)
     now = datetime.now(timezone.utc)
     record: dict[str, Any] = {
@@ -63,8 +66,11 @@ def save_session(
     filename = f"{ts_slug}_task{task_id}.json"
     filepath = hdir / filename
 
-    filepath.write_text(json.dumps(record, indent=2), encoding="utf-8")
-    logger.info("Saved session history → %s", filepath)
+    try:
+        filepath.write_text(json.dumps(record, indent=2), encoding="utf-8")
+        logger.info("Saved session history → %s", filepath)
+    except OSError:
+        logger.warning("Failed to write session history to %s", filepath, exc_info=True)
     return filepath
 
 
