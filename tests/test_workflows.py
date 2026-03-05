@@ -45,3 +45,41 @@ def _make_concrete_workflow(**kwargs):
             return WorkflowResult(success=True, output="ok")
 
     return ConcreteWorkflow(**kwargs)
+
+
+async def test_workflow_dispatch_roundtrip(tmp_path):
+    """Full roundtrip: enqueue -> fetch -> build workflow -> run."""
+    from unittest.mock import AsyncMock, patch
+    from ue_agent.queue import TaskQueue
+    from ue_agent.workflows.base import WorkflowResult
+
+    q = TaskQueue(str(tmp_path / "test.db"))
+    await q.initialize()
+
+    task_id = await q.enqueue(
+        workflow="compile", project="TestProj", platform="Win64", params={},
+        discord_channel_id="c", discord_message_id="m", requested_by="u",
+    )
+    task = await q.fetch_next()
+
+    notifier = AsyncMock()
+
+    import ue_agent.workflows.compile  # noqa: F401
+    from ue_agent.config import UEConfig, CompileConfig, BudgetConfig
+
+    with patch("ue_agent.workflows.compile.run_uat", return_value=(0, "ok", "")):
+        from ue_agent.workflows.compile import CompileWorkflow
+        wf = CompileWorkflow(
+            task=task, queue=q, notifier=notifier,
+            ue_config=UEConfig(engine_path="C:/UE5"),
+            compile_config=CompileConfig(),
+            budget_config=BudgetConfig(),
+            repo_root="/tmp",
+        )
+        result = await wf.run()
+
+    assert result.success is True
+    final = await q.get(task_id)
+    assert final["status"] == "completed"
+
+    await q.close()
