@@ -19,19 +19,33 @@ cd adw-agent
 uv sync
 ```
 
-### 2. Configure secrets
+### 2. Create the Discord bot
+
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
+2. Click **New Application**, give it a name, then go to **Bot** in the left sidebar
+3. Enable **Message Content Intent** under Privileged Gateway Intents
+4. Click **Reset Token** (or **Copy** if first time) -- save this token, it's only shown once
+
+### 3. Invite the bot to your server
+
+1. In the Developer Portal, go to **OAuth2** > **URL Generator**
+2. Under **Scopes**, check `bot`
+3. Under **Bot Permissions**, check: Send Messages, Read Message History, View Channels
+4. Copy the generated URL, paste it in your browser, select your server, and authorize
+
+### 4. Configure secrets
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and set your Discord bot token:
+Edit `.env` and paste your bot token:
 
 ```env
-DISCORD_BOT_TOKEN=your-actual-token
+DISCORD_BOT_TOKEN=MTIzNDU2Nzg5MDEyMzQ1Njc4OQ.Abc123.xyz...
 ```
 
-### 3. Configure the agent
+### 5. Configure the agent
 
 ```bash
 cp config.toml.example config.toml
@@ -49,15 +63,9 @@ command_channel_id = "1234567890"  # your channel ID (leave empty for any channe
 required_role = "BuildOps"         # Discord role required to use commands (leave empty to allow all)
 ```
 
-### 4. Set up the Discord bot
+### 6. Start the daemon
 
-1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
-2. Create a new application, then create a Bot under it
-3. Enable **Message Content Intent** under Bot settings
-4. Invite the bot to your server with permissions: Send Messages, Read Message History
-5. Copy the bot token into your `.env`
-
-### 5. Start the daemon
+For development (always uses local source):
 
 ```bash
 uv run ue-agent start
@@ -69,6 +77,17 @@ Or install globally:
 uv tool install .
 ue-agent start
 ```
+
+**Important:** The daemon finds its config by looking for `adw-agent/` relative to your current working directory. Always run `ue-agent` from the repo root or the `adw-agent/` directory.
+
+After code changes, the global install must be rebuilt:
+
+```bash
+cd adw-agent
+uv cache clean ue-agent && uv tool install . --reinstall
+```
+
+During development, prefer `uv run ue-agent start` which always uses the local source.
 
 ## Discord Commands
 
