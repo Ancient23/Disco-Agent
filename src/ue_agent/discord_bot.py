@@ -124,6 +124,35 @@ class DiscordNotifier:
 
         await channel.send(truncate_for_discord(text))
 
+    async def create_thread(self, channel_id: str, message_id: str, name: str) -> str:
+        """Create a thread on a message. Returns thread ID as string."""
+        channel = self.bot.get_channel(int(channel_id))
+        if not channel:
+            return ""
+        message = await channel.fetch_message(int(message_id))
+        thread = await message.create_thread(name=name)
+        return str(thread.id)
+
+    async def send_to_thread(self, thread_id: str, message: str) -> str:
+        """Send a message to a thread. Returns message ID as string."""
+        thread = self.bot.get_channel(int(thread_id))
+        if not thread:
+            return ""
+        msg = await thread.send(truncate_for_discord(message))
+        return str(msg.id)
+
+    async def edit_message(self, thread_id: str, message_id: str, new_content: str) -> None:
+        """Edit an existing message in a thread."""
+        thread = self.bot.get_channel(int(thread_id))
+        if not thread:
+            return
+        msg = await thread.fetch_message(int(message_id))
+        await msg.edit(content=truncate_for_discord(new_content))
+
+    def get_thread(self, thread_id: str):
+        """Get a thread channel object for StreamingDiscordMessage."""
+        return self.bot.get_channel(int(thread_id))
+
 
 def create_bot(config: AgentConfig, queue: TaskQueue, repo_root: str = "") -> discord.Client:
     intents = discord.Intents.default()
