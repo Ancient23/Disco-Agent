@@ -6,3 +6,4 @@ dist/
 .pytest_cache/
 tasks.db
 .env
+config.toml
