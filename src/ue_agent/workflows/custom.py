@@ -9,7 +9,7 @@ from claude_agent_sdk import ClaudeAgentOptions, query
 from ue_agent.config import BudgetConfig
 from ue_agent.cost_tracker import CostTracker
 from ue_agent.queue import TaskQueue
-from ue_agent.session_history import get_history_dir, build_history_context, save_session
+from ue_agent.session_history import get_history_dir, inject_history_context, save_session
 from ue_agent.workflows import register
 from ue_agent.workflows.base import BaseWorkflow, Notifier, WorkflowResult
 
@@ -38,17 +38,11 @@ class CustomWorkflow(BaseWorkflow):
         if not prompt:
             return WorkflowResult(success=False, error="No prompt provided")
 
-        # Inject prior session history so Claude can reference earlier conversations
-        history_context = build_history_context(history_dir=self.history_dir)
-        if history_context:
-            full_prompt = (
-                f"{history_context}\n"
-                "The user may reference previous sessions above. "
-                "Execute the following request:\n\n"
-                f"{prompt}"
-            )
-        else:
-            full_prompt = prompt
+        full_prompt = inject_history_context(
+            prompt,
+            instruction="Execute the following request:",
+            history_dir=self.history_dir,
+        )
 
         sdk_output = ""
         async for message in query(

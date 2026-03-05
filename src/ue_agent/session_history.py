@@ -133,6 +133,23 @@ def format_session_for_prompt(session: dict[str, Any], *, max_output_len: int = 
     )
 
 
+def inject_history_context(
+    prompt: str,
+    *,
+    instruction: str,
+    history_dir: str | Path | None = None,
+) -> str:
+    """Prepend recent session history to a prompt if any exists."""
+    history_context = build_history_context(history_dir=history_dir)
+    if not history_context:
+        return prompt
+    return (
+        f"{history_context}\n"
+        f"The user may reference previous sessions above. {instruction}\n\n"
+        f"{prompt}"
+    )
+
+
 def build_history_context(
     history_dir: str | Path | None = None,
     max_sessions: int = 10,

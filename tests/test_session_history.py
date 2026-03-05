@@ -6,6 +6,7 @@ from ue_agent.session_history import (
     build_history_context,
     format_session_for_prompt,
     get_history_dir,
+    inject_history_context,
     load_all_sessions,
     load_recent_sessions,
     save_session,
@@ -165,3 +166,24 @@ class TestGetHistoryDir:
         result = get_history_dir("/some/repo")
         assert result.replace("\\", "/").endswith("adw-agent/chat_history")
         assert result.replace("\\", "/").startswith("/some/repo")
+
+
+class TestInjectHistoryContext:
+    def test_returns_prompt_unchanged_when_no_history(self, history_dir):
+        result = inject_history_context(
+            "my question",
+            instruction="Answer:",
+            history_dir=history_dir,
+        )
+        assert result == "my question"
+
+    def test_prepends_history_when_available(self, history_dir):
+        _save(history_dir, prompt="old question", output="old answer")
+        result = inject_history_context(
+            "new question",
+            instruction="Answer the following:",
+            history_dir=history_dir,
+        )
+        assert "old question" in result
+        assert "Answer the following:" in result
+        assert result.endswith("new question")
