@@ -7,3 +7,4 @@ dist/
 tasks.db
 .env
 config.toml
+chat_history/

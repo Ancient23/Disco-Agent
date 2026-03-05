@@ -112,7 +112,7 @@ async def run_daemon(config: AgentConfig, repo_root: str):
     queue = TaskQueue(config.general.db_path)
     await queue.initialize()
 
-    bot = create_bot(config, queue)
+    bot = create_bot(config, queue, repo_root=repo_root)
     notifier = DiscordNotifier(bot)
     shutdown_event = asyncio.Event()
 

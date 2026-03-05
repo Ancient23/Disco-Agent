@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import discord
 
 from ue_agent.config import AgentConfig
 from ue_agent.queue import TaskQueue
+from ue_agent.session_history import format_session_for_prompt, load_recent_sessions, search_sessions
 from ue_agent.utils import truncate_for_discord
 from ue_agent.workflows.base import WorkflowResult
 
@@ -85,6 +87,15 @@ def parse_command(text: str) -> dict[str, Any] | None:
     if cmd == "!cancel":
         return {"workflow": "__cancel", "project": "", "platform": "", "params": {}}
 
+    if cmd == "!history":
+        search_term = rest.strip('"').strip("'").strip() if rest else ""
+        return {
+            "workflow": "__history",
+            "project": "",
+            "platform": "",
+            "params": {"search": search_term},
+        }
+
     if cmd == "!help":
         return {"workflow": "__help", "project": "", "platform": "", "params": {}}
 
@@ -115,13 +126,14 @@ class DiscordNotifier:
         await channel.send(truncate_for_discord(text))
 
 
-def create_bot(config: AgentConfig, queue: TaskQueue) -> discord.Client:
+def create_bot(config: AgentConfig, queue: TaskQueue, repo_root: str = "") -> discord.Client:
     intents = discord.Intents.default()
     intents.message_content = True
     bot = discord.Client(intents=intents)
 
     required_role = config.discord.required_role
     command_channel_id = config.discord.command_channel_id
+    history_dir = str(Path(repo_root) / "adw-agent" / "chat_history") if repo_root else "chat_history"
 
     @bot.event
     async def on_ready():
@@ -144,6 +156,29 @@ def create_bot(config: AgentConfig, queue: TaskQueue) -> discord.Client:
         if parsed is None:
             return
 
+        if parsed["workflow"] == "__history":
+            search_term = parsed["params"].get("search", "")
+            if search_term:
+                sessions = search_sessions(
+                    search_term, history_dir=history_dir, max_results=5,
+                )
+                header = f"**Session history matching** `{search_term}`"
+            else:
+                sessions = load_recent_sessions(n=5, history_dir=history_dir)
+                header = "**Recent session history**"
+
+            if not sessions:
+                await message.channel.send(f"{header}\nNo sessions found.")
+                return
+
+            lines = [header]
+            for s in sessions:
+                lines.append(format_session_for_prompt(s, max_output_len=200))
+            await message.channel.send(
+                truncate_for_discord("\n".join(lines))
+            )
+            return
+
         if parsed["workflow"] == "__help":
             help_text = (
                 "**UE Build Agent Commands**\n"
@@ -153,6 +188,7 @@ def create_bot(config: AgentConfig, queue: TaskQueue) -> discord.Client:
                 "!submit <project> [options]     Submit Conductor render job\n"
                 '!analyze "<question>"            Research the codebase (read-only)\n'
                 '!run "<prompt>"                  Freeform Claude session (read/write)\n'
+                '!history [search]               Show past sessions (optional keyword search)\n'
                 "!status                         Show task queue\n"
                 "!cancel                         Cancel all active tasks\n"
                 "!help                           Show this message\n"
@@ -164,6 +200,7 @@ def create_bot(config: AgentConfig, queue: TaskQueue) -> discord.Client:
                 "!submit CitySample --dry-run\n"
                 '!analyze "why does the 4D capture crash on frame 200"\n'
                 '!run "add error handling to s3_upload.py"\n'
+                "!history crash\n"
                 "```"
             )
             await message.channel.send(help_text)
