@@ -103,10 +103,13 @@ class CompileWorkflow(BaseWorkflow):
                 f"Compile attempt {attempt}/{max_retries} for `{self.task['project']}`",
             )
 
+            task_platform = self.task.get("platform") or self.ue_config.platform
+            task_project_path = self.task.get("project_path") or self.ue_config.project_path
+
             exit_code, stdout, stderr = await run_uat(
                 engine_path=self.ue_config.engine_path,
-                project_path=self.ue_config.project_path,
-                platform=self.ue_config.platform,
+                project_path=task_project_path,
+                platform=task_platform,
                 flags=self.ue_config.build_flags,
                 cwd=self.repo_root,
             )
