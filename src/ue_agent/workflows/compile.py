@@ -39,8 +39,9 @@ async def run_uat(
         cwd=cwd,
     )
     stdout_bytes, stderr_bytes = await proc.communicate()
+    returncode = proc.returncode if proc.returncode is not None else 1
     return (
-        proc.returncode or 1,
+        returncode,
         stdout_bytes.decode("utf-8", errors="replace"),
         stderr_bytes.decode("utf-8", errors="replace"),
     )
