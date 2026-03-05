@@ -11,6 +11,8 @@ build_flags = ["-cook", "-stage", "-pak", "-unattended", "-nullrhi"]
 [discord]
 command_channel_id = ""
 required_role = "BuildOps"
+# Workflows that reply directly in the channel instead of creating a thread
+non_threaded_workflows = []
 
 [conductor]
 conductor_agent_path = "conductor-agent"

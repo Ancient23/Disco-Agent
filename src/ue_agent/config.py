@@ -27,6 +27,7 @@ class DiscordConfig:
     bot_token: str = ""
     command_channel_id: str = ""
     required_role: str = "BuildOps"
+    non_threaded_workflows: list[str] = field(default_factory=list)
 
 
 @dataclass

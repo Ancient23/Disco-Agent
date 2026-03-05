@@ -74,6 +74,33 @@ engine_path = "C:/UE5"
     assert config.budgets.compile_warning_usd == 5.0
 
 
+def test_non_threaded_workflows_default_empty():
+    from ue_agent.config import AgentConfig
+
+    config = AgentConfig()
+    assert config.discord.non_threaded_workflows == []
+
+
+def test_non_threaded_workflows_loaded_from_toml(tmp_path):
+    config_toml = tmp_path / "config.toml"
+    config_toml.write_text("""
+[general]
+[ue]
+[discord]
+non_threaded_workflows = ["compile"]
+[conductor]
+[budgets]
+[compile]
+""")
+    env_file = tmp_path / ".env"
+    env_file.write_text("DISCORD_BOT_TOKEN=tok\n")
+
+    from ue_agent.config import load_config
+
+    config = load_config(config_path=config_toml, env_path=env_file)
+    assert config.discord.non_threaded_workflows == ["compile"]
+
+
 def test_load_config_missing_token_raises(tmp_path):
     config_toml = tmp_path / "config.toml"
     config_toml.write_text("[general]\n[ue]\n[discord]\n[conductor]\n[budgets]\n[compile]\n")
