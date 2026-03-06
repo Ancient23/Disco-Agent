@@ -6,10 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import ClaudeAgentOptions, query
+from claude_agent_sdk.types import AssistantMessage, ResultMessage, TextBlock, ToolUseBlock
 
 from ue_agent.config import BudgetConfig, CompileConfig, UEConfig
 from ue_agent.cost_tracker import CostTracker
 from ue_agent.queue import TaskQueue
+from ue_agent.streaming import StreamingDiscordMessage
 from ue_agent.utils import tail_lines
 from ue_agent.workflows import register
 from ue_agent.workflows.base import BaseWorkflow, Notifier, WorkflowResult
@@ -86,6 +88,13 @@ class CompileWorkflow(BaseWorkflow):
         self.cost_tracker = CostTracker(budget_config.compile_warning_usd)
         self.repo_root = repo_root
 
+    async def _send_update(self, text: str) -> None:
+        """Send a status update to thread or channel."""
+        if self.thread_id:
+            await self.notifier.send_to_thread(self.thread_id, text)
+        else:
+            await self.notifier.send_status(self.channel_id, text)
+
     async def execute(self) -> WorkflowResult:
         max_retries = self.compile_config.max_retries
         last_error = ""
@@ -98,8 +107,7 @@ class CompileWorkflow(BaseWorkflow):
                     cost_usd=self.cost_tracker.total_cost_usd,
                 )
 
-            await self.notifier.send_status(
-                self.channel_id,
+            await self._send_update(
                 f"Compile attempt {attempt}/{max_retries} for `{self.task['project']}`",
             )
 
@@ -127,26 +135,42 @@ class CompileWorkflow(BaseWorkflow):
             if attempt >= max_retries:
                 break
 
-            await self.notifier.send_status(
-                self.channel_id,
+            await self._send_update(
                 f"Build failed (attempt {attempt}). Analyzing error with Claude...",
             )
 
             sdk_output = ""
+            stream = None
+            if self.thread_id:
+                thread = self.notifier.get_thread(self.thread_id)
+                if thread:
+                    stream = StreamingDiscordMessage(thread)
+
             async for message in sdk_analyze_and_fix(
                 error_log=error_tail,
                 repo_root=self.repo_root,
                 allowed_tools=["Read", "Edit", "Glob", "Grep", "Bash"],
             ):
-                if hasattr(message, "cost_usd"):
-                    warnings = self.cost_tracker.add_cost(message.cost_usd)
-                    for w in warnings:
-                        await self.notifier.send_status(self.channel_id, w)
-                if hasattr(message, "result"):
-                    sdk_output = message.result
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock) and stream:
+                            await stream.append(block.text)
+                            logger.info("Claude: %s", block.text[:200])
+                        elif isinstance(block, ToolUseBlock) and stream:
+                            await stream.append_tool_use(block.name, block.input)
+                            logger.info("Tool: %s", block.name)
+                elif isinstance(message, ResultMessage):
+                    if message.total_cost_usd is not None:
+                        warnings = self.cost_tracker.add_cost(message.total_cost_usd)
+                        for w in warnings:
+                            await self._send_update(w)
+                    if message.result:
+                        sdk_output = message.result
 
-            await self.notifier.send_status(
-                self.channel_id,
+            if stream:
+                await stream.finalize()
+
+            await self._send_update(
                 f"Fix attempted. Recompiling...",
             )
 
