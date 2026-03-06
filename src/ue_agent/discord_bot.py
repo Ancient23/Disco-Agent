@@ -263,6 +263,8 @@ def create_bot(config: AgentConfig, queue: TaskQueue, repo_root: str = "") -> di
                 '!run "add error handling to s3_upload.py"\n'
                 "!history crash\n"
                 "```"
+                "\n**Thread Replies**\n"
+                "Reply in a task thread to continue the conversation — no `!` command needed.\n"
             )
             await message.channel.send(help_text)
             return
