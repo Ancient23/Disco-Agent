@@ -30,7 +30,7 @@ uv sync
 
 1. In the Developer Portal, go to **OAuth2** > **URL Generator**
 2. Under **Scopes**, check `bot`
-3. Under **Bot Permissions**, check: Send Messages, Read Message History, View Channels
+3. Under **Bot Permissions**, check: Send Messages, Create Public Threads, Send Messages in Threads, Read Message History, View Channels
 4. Copy the generated URL, paste it in your browser, select your server, and authorize
 
 ### 4. Configure secrets
@@ -98,8 +98,23 @@ During development, prefer `uv run ue-agent start` which always uses the local s
 | `!submit CitySample --dry-run` | Submit a Conductor render job using the `.claude/commands/` in conductor-agent. |
 | `!analyze "why does X crash"` | Read-only research session -- Claude explores the codebase to answer your question. |
 | `!run "refactor s3_upload.py"` | Freeform prompt -- Claude can read and write files in the repo. |
+| `!history [search]` | Show recent sessions, or search past sessions by keyword. |
 | `!status` | Show the current task queue. |
 | `!cancel` | Cancel all active/pending tasks. |
+| `!help` | Show command reference in Discord. |
+
+## Threads & Live Output
+
+Every command creates a **Discord thread** on the original message. Claude's output streams into the thread in real-time via edit-in-place messages, keeping the main channel clean.
+
+**Thread replies:** Reply in any task thread (no `!` prefix needed) to continue the conversation. Thread replies spawn a new Claude session with the full thread history as context and read/write access.
+
+To disable threads for specific workflows, add them to `config.toml`:
+
+```toml
+[discord]
+non_threaded_workflows = ["compile"]  # these fall back to channel messages
+```
 
 ## How It Works
 
@@ -169,6 +184,8 @@ adw-agent/
 │   ├── queue.py            # SQLite task queue
 │   ├── config.py           # TOML + .env config loading
 │   ├── cost_tracker.py     # Soft budget warning tracker
+│   ├── session_history.py  # Persist/query chat session history
+│   ├── streaming.py        # Edit-in-place Discord message streaming
 │   ├── utils.py            # Log parsing, message truncation
 │   └── workflows/
 │       ├── __init__.py     # Registry + @register decorator
