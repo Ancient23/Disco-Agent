@@ -47,6 +47,56 @@ def _make_concrete_workflow(**kwargs):
     return ConcreteWorkflow(**kwargs)
 
 
+async def test_workflow_creates_thread_when_enabled():
+    from unittest.mock import AsyncMock
+    from ue_agent.workflows.base import BaseWorkflow, WorkflowResult
+
+    class FakeWorkflow(BaseWorkflow):
+        async def execute(self) -> WorkflowResult:
+            assert self.thread_id != ""
+            return WorkflowResult(success=True, output="done")
+
+    task = {
+        "id": 1, "workflow": "analyze", "project": "",
+        "discord_channel_id": "chan1", "discord_message_id": "msg1",
+        "requested_by": "user1",
+    }
+    queue = AsyncMock()
+    notifier = AsyncMock()
+    notifier.create_thread = AsyncMock(return_value="thread123")
+    notifier.send_to_thread = AsyncMock(return_value="msg999")
+
+    wf = FakeWorkflow(task=task, queue=queue, notifier=notifier)
+    wf.use_threads = True
+    result = await wf.run()
+    assert result.success
+    notifier.create_thread.assert_called_once()
+
+
+async def test_workflow_skips_thread_when_disabled():
+    from unittest.mock import AsyncMock
+    from ue_agent.workflows.base import BaseWorkflow, WorkflowResult
+
+    class FakeWorkflow(BaseWorkflow):
+        async def execute(self) -> WorkflowResult:
+            assert self.thread_id == ""
+            return WorkflowResult(success=True, output="done")
+
+    task = {
+        "id": 1, "workflow": "compile", "project": "X",
+        "discord_channel_id": "chan1", "discord_message_id": "msg1",
+        "requested_by": "user1",
+    }
+    queue = AsyncMock()
+    notifier = AsyncMock()
+
+    wf = FakeWorkflow(task=task, queue=queue, notifier=notifier)
+    wf.use_threads = False
+    result = await wf.run()
+    assert result.success
+    notifier.create_thread.assert_not_called()
+
+
 async def test_workflow_dispatch_roundtrip(tmp_path):
     """Full roundtrip: enqueue -> fetch -> build workflow -> run."""
     from unittest.mock import AsyncMock, patch

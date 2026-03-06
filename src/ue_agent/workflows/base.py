@@ -43,22 +43,47 @@ class BaseWorkflow(ABC):
         self.task_id: int = task["id"]
         self.channel_id: str = task["discord_channel_id"]
         self.message_id: str = task["discord_message_id"]
+        self.thread_id: str = ""
+        self.use_threads: bool = True
 
     async def is_cancelled(self) -> bool:
         return await self.queue.is_cancelled(self.task_id)
 
     async def run(self) -> WorkflowResult:
-        await self.notifier.send_status(
-            self.channel_id,
-            f"Started **{self.task['workflow']}** for `{self.task['project']}`",
-        )
+        if self.use_threads:
+            try:
+                thread_name = f"Task #{self.task_id} — {self.task['workflow']}"
+                self.thread_id = await self.notifier.create_thread(
+                    self.channel_id, self.message_id, thread_name,
+                )
+                await self.notifier.send_to_thread(
+                    self.thread_id,
+                    f"Starting **{self.task['workflow']}** for `{self.task.get('project', '')}`...",
+                )
+            except Exception:
+                logger.warning("Failed to create thread, falling back to channel", exc_info=True)
+                self.thread_id = ""
+
+        if not self.thread_id:
+            await self.notifier.send_status(
+                self.channel_id,
+                f"Started **{self.task['workflow']}** for `{self.task['project']}`",
+            )
+
         try:
             result = await self.execute()
         except Exception as e:
             logger.exception("Workflow failed with exception")
             result = WorkflowResult(success=False, error=str(e))
 
-        await self.notifier.send_result(self.channel_id, self.message_id, result)
+        if self.thread_id:
+            if result.success:
+                text = f"**Completed** (${result.cost_usd:.2f})\n{result.output}"
+            else:
+                text = f"**Failed** (${result.cost_usd:.2f})\n{result.error}"
+            await self.notifier.send_to_thread(self.thread_id, text)
+        else:
+            await self.notifier.send_result(self.channel_id, self.message_id, result)
 
         if result.success:
             await self.queue.complete(
