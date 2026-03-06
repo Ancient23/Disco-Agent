@@ -83,6 +83,7 @@ async def poll_loop(
                 logger.info(f"Running {workflow_name} task #{task['id']}")
                 try:
                     wf = _build_workflow(workflow_name, task, queue, notifier, config, repo_root)
+                    wf.use_threads = workflow_name not in config.discord.non_threaded_workflows
                     await wf.run()
                 except Exception:
                     logger.exception(f"Unhandled error in workflow {workflow_name}")
