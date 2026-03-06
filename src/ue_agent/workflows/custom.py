@@ -5,11 +5,13 @@ import logging
 from typing import Any
 
 from claude_agent_sdk import ClaudeAgentOptions, query
+from claude_agent_sdk.types import AssistantMessage, ResultMessage, TextBlock, ToolUseBlock
 
 from ue_agent.config import BudgetConfig
 from ue_agent.cost_tracker import CostTracker
 from ue_agent.queue import TaskQueue
 from ue_agent.session_history import get_history_dir, inject_history_context, save_session
+from ue_agent.streaming import StreamingDiscordMessage
 from ue_agent.workflows import register
 from ue_agent.workflows.base import BaseWorkflow, Notifier, WorkflowResult
 
@@ -44,6 +46,12 @@ class CustomWorkflow(BaseWorkflow):
             history_dir=self.history_dir,
         )
 
+        stream = None
+        if self.thread_id:
+            thread = self.notifier.get_thread(self.thread_id)
+            if thread:
+                stream = StreamingDiscordMessage(thread)
+
         sdk_output = ""
         async for message in query(
             prompt=full_prompt,
@@ -53,12 +61,27 @@ class CustomWorkflow(BaseWorkflow):
                 permission_mode="bypassPermissions",
             ),
         ):
-            if hasattr(message, "cost_usd"):
-                warnings = self.cost_tracker.add_cost(message.cost_usd)
-                for w in warnings:
-                    await self.notifier.send_status(self.channel_id, w)
-            if hasattr(message, "result"):
-                sdk_output = message.result
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock) and stream:
+                        await stream.append(block.text)
+                        logger.info("Claude: %s", block.text[:200])
+                    elif isinstance(block, ToolUseBlock) and stream:
+                        await stream.append_tool_use(block.name, block.input)
+                        logger.info("Tool: %s", block.name)
+            elif isinstance(message, ResultMessage):
+                if message.total_cost_usd is not None:
+                    warnings = self.cost_tracker.add_cost(message.total_cost_usd)
+                    for w in warnings:
+                        if self.thread_id:
+                            await self.notifier.send_to_thread(self.thread_id, w)
+                        else:
+                            await self.notifier.send_status(self.channel_id, w)
+                if message.result:
+                    sdk_output = message.result
+
+        if stream:
+            await stream.finalize()
 
         # Persist this session for future reference
         save_session(
