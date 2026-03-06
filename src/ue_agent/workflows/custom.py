@@ -40,11 +40,28 @@ class CustomWorkflow(BaseWorkflow):
         if not prompt:
             return WorkflowResult(success=False, error="No prompt provided")
 
-        full_prompt = inject_history_context(
-            prompt,
-            instruction="Execute the following request:",
-            history_dir=self.history_dir,
-        )
+        thread_context = params.get("thread_context", "")
+        thread_id_override = params.get("thread_id", "")
+
+        if thread_context:
+            full_prompt = (
+                "=== Previous conversation in this thread ===\n"
+                f"{thread_context}\n"
+                "=== End of thread history ===\n\n"
+                "The user may reference the conversation above. "
+                f"Execute the following request:\n\n{prompt}"
+            )
+        else:
+            full_prompt = inject_history_context(
+                prompt,
+                instruction="Execute the following request:",
+                history_dir=self.history_dir,
+            )
+
+        # If this is a thread reply, use the existing thread instead of creating a new one
+        if thread_id_override:
+            self.thread_id = thread_id_override
+            self.use_threads = False  # Don't create a new thread in run()
 
         stream = None
         if self.thread_id:

@@ -131,7 +131,11 @@ class DiscordNotifier:
             return ""
         message = await channel.fetch_message(int(message_id))
         thread = await message.create_thread(name=name)
-        return str(thread.id)
+        thread_id = str(thread.id)
+        # Register for reply tracking
+        if hasattr(self.bot, "active_threads"):
+            self.bot.active_threads[thread.id] = {"name": name}
+        return thread_id
 
     async def send_to_thread(self, thread_id: str, message: str) -> str:
         """Send a message to a thread. Returns message ID as string."""
@@ -158,6 +162,7 @@ def create_bot(config: AgentConfig, queue: TaskQueue, repo_root: str = "") -> di
     intents = discord.Intents.default()
     intents.message_content = True
     bot = discord.Client(intents=intents)
+    bot.active_threads = {}  # type: ignore[attr-defined]
 
     required_role = config.discord.required_role
     command_channel_id = config.discord.command_channel_id
@@ -183,7 +188,33 @@ def create_bot(config: AgentConfig, queue: TaskQueue, repo_root: str = "") -> di
                 return
 
         parsed = parse_command(message.content)
+
+        # Thread reply: if in an active thread and no command parsed
         if parsed is None:
+            if isinstance(message.channel, discord.Thread) and message.channel.id in bot.active_threads:
+                history_messages = []
+                async for msg in message.channel.history(limit=50, oldest_first=True):
+                    if msg.id == message.id:
+                        continue
+                    role = "assistant" if msg.author == bot.user else "user"
+                    history_messages.append(f"[{role}] {msg.content}")
+
+                thread_context = "\n".join(history_messages)
+
+                task_id = await queue.enqueue(
+                    workflow="custom",
+                    project="",
+                    platform="",
+                    params={
+                        "prompt": message.content,
+                        "thread_context": thread_context,
+                        "thread_id": str(message.channel.id),
+                    },
+                    discord_channel_id=str(message.channel.id),
+                    discord_message_id=str(message.id),
+                    requested_by=str(message.author),
+                )
+                logger.info("Thread reply → queued custom task #%d", task_id)
             return
 
         if parsed["workflow"] == "__history":
