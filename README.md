@@ -33,6 +33,8 @@ uv sync
 3. Under **Bot Permissions**, check: Send Messages, Create Public Threads, Send Messages in Threads, Read Message History, View Channels
 4. Copy the generated URL, paste it in your browser, select your server, and authorize
 
+> **Updating an existing bot?** If you previously invited the bot without thread permissions, regenerate the OAuth2 URL with the full permission set above and re-authorize. This updates permissions in place — it won't duplicate the bot.
+
 ### 4. Configure secrets
 
 ```bash
