@@ -40,7 +40,6 @@ class CustomWorkflow(BaseWorkflow):
             return WorkflowResult(success=False, error="No prompt provided")
 
         thread_context = params.get("thread_context", "")
-        thread_id_override = params.get("thread_id", "")
 
         if thread_context:
             full_prompt = (
@@ -56,11 +55,6 @@ class CustomWorkflow(BaseWorkflow):
                 instruction="Execute the following request:",
                 history_dir=self.history_dir,
             )
-
-        # If this is a thread reply, use the existing thread instead of creating a new one
-        if thread_id_override:
-            self.thread_id = thread_id_override
-            self.use_threads = False  # Don't create a new thread in run()
 
         stream = self._create_stream()
         sdk_output = ""

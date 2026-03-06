@@ -65,6 +65,15 @@ class BaseWorkflow(ABC):
         return StreamingDiscordMessage(thread) if thread else None
 
     async def run(self) -> WorkflowResult:
+        # Thread reply: reuse existing thread instead of creating a new one
+        params = self.task.get("params", {})
+        if isinstance(params, str):
+            import json
+            params = json.loads(params)
+        if params.get("thread_id"):
+            self.thread_id = params["thread_id"]
+            self.use_threads = False
+
         if self.use_threads:
             try:
                 thread_name = f"Task #{self.task_id} — {self.task['workflow']}"
