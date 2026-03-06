@@ -11,7 +11,6 @@ from ue_agent.config import BudgetConfig
 from ue_agent.cost_tracker import CostTracker
 from ue_agent.queue import TaskQueue
 from ue_agent.session_history import get_history_dir, inject_history_context, save_session
-from ue_agent.streaming import StreamingDiscordMessage
 from ue_agent.workflows import register
 from ue_agent.workflows.base import BaseWorkflow, Notifier, WorkflowResult
 
@@ -63,12 +62,7 @@ class CustomWorkflow(BaseWorkflow):
             self.thread_id = thread_id_override
             self.use_threads = False  # Don't create a new thread in run()
 
-        stream = None
-        if self.thread_id:
-            thread = self.notifier.get_thread(self.thread_id)
-            if thread:
-                stream = StreamingDiscordMessage(thread)
-
+        stream = self._create_stream()
         sdk_output = ""
         async for message in query(
             prompt=full_prompt,
@@ -88,12 +82,8 @@ class CustomWorkflow(BaseWorkflow):
                         logger.info("Tool: %s", block.name)
             elif isinstance(message, ResultMessage):
                 if message.total_cost_usd is not None:
-                    warnings = self.cost_tracker.add_cost(message.total_cost_usd)
-                    for w in warnings:
-                        if self.thread_id:
-                            await self.notifier.send_to_thread(self.thread_id, w)
-                        else:
-                            await self.notifier.send_status(self.channel_id, w)
+                    for w in self.cost_tracker.add_cost(message.total_cost_usd):
+                        await self._send_update(w)
                 if message.result:
                     sdk_output = message.result
 

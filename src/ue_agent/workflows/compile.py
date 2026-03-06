@@ -11,7 +11,6 @@ from claude_agent_sdk.types import AssistantMessage, ResultMessage, TextBlock, T
 from ue_agent.config import BudgetConfig, CompileConfig, UEConfig
 from ue_agent.cost_tracker import CostTracker
 from ue_agent.queue import TaskQueue
-from ue_agent.streaming import StreamingDiscordMessage
 from ue_agent.utils import tail_lines
 from ue_agent.workflows import register
 from ue_agent.workflows.base import BaseWorkflow, Notifier, WorkflowResult
@@ -88,13 +87,6 @@ class CompileWorkflow(BaseWorkflow):
         self.cost_tracker = CostTracker(budget_config.compile_warning_usd)
         self.repo_root = repo_root
 
-    async def _send_update(self, text: str) -> None:
-        """Send a status update to thread or channel."""
-        if self.thread_id:
-            await self.notifier.send_to_thread(self.thread_id, text)
-        else:
-            await self.notifier.send_status(self.channel_id, text)
-
     async def execute(self) -> WorkflowResult:
         max_retries = self.compile_config.max_retries
         last_error = ""
@@ -140,11 +132,7 @@ class CompileWorkflow(BaseWorkflow):
             )
 
             sdk_output = ""
-            stream = None
-            if self.thread_id:
-                thread = self.notifier.get_thread(self.thread_id)
-                if thread:
-                    stream = StreamingDiscordMessage(thread)
+            stream = self._create_stream()
 
             async for message in sdk_analyze_and_fix(
                 error_log=error_tail,

@@ -133,8 +133,7 @@ class DiscordNotifier:
         thread = await message.create_thread(name=name)
         thread_id = str(thread.id)
         # Register for reply tracking
-        if hasattr(self.bot, "active_threads"):
-            self.bot.active_threads[thread.id] = {"name": name}
+        self.bot.active_threads[thread.id] = {"name": name}
         return thread_id
 
     async def send_to_thread(self, thread_id: str, message: str) -> str:
@@ -177,8 +176,12 @@ def create_bot(config: AgentConfig, queue: TaskQueue, repo_root: str = "") -> di
         if message.author == bot.user:
             return
 
-        if command_channel_id and str(message.channel.id) != command_channel_id:
-            return
+        # Allow messages from the command channel or from threads parented to it
+        if command_channel_id:
+            channel_id = str(message.channel.id)
+            parent_id = str(getattr(message.channel, "parent_id", "")) if isinstance(message.channel, discord.Thread) else ""
+            if channel_id != command_channel_id and parent_id != command_channel_id:
+                return
 
         if required_role:
             if not isinstance(message.author, discord.Member):

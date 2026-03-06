@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from ue_agent.queue import TaskQueue
+from ue_agent.streaming import StreamingDiscordMessage
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,20 @@ class BaseWorkflow(ABC):
 
     async def is_cancelled(self) -> bool:
         return await self.queue.is_cancelled(self.task_id)
+
+    async def _send_update(self, text: str) -> None:
+        """Send a status update to thread (if active) or channel."""
+        if self.thread_id:
+            await self.notifier.send_to_thread(self.thread_id, text)
+        else:
+            await self.notifier.send_status(self.channel_id, text)
+
+    def _create_stream(self) -> StreamingDiscordMessage | None:
+        """Create a streaming message for the thread, or None if no thread."""
+        if not self.thread_id:
+            return None
+        thread = self.notifier.get_thread(self.thread_id)
+        return StreamingDiscordMessage(thread) if thread else None
 
     async def run(self) -> WorkflowResult:
         if self.use_threads:
