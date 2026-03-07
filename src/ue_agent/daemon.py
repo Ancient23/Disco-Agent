@@ -201,24 +201,29 @@ def main():
     if explicit_config:
         # Explicit config: derive .env from same directory
         config_path = explicit_config.resolve()
-        env_path = config_path.parent / ".env"
+        config_dir = config_path.parent
+        env_path = config_dir / ".env"
         config = load_config(config_path=config_path, env_path=env_path)
         # repo_root: from config, or parent of config dir (assumes config is in adw-agent/)
         if config.general.repo_root:
             repo_root = Path(config.general.repo_root)
         else:
-            repo_root = config_path.parent.parent
+            repo_root = config_dir.parent
     else:
         # Auto-detect from CWD (original behavior)
         repo_root = _find_repo_root()
-        agent_dir = repo_root / "adw-agent"
+        config_dir = repo_root / "adw-agent"
         config = load_config(
-            config_path=agent_dir / "config.toml",
-            env_path=agent_dir / ".env",
+            config_path=config_dir / "config.toml",
+            env_path=config_dir / ".env",
         )
         # Config repo_root overrides auto-detection
         if config.general.repo_root:
             repo_root = Path(config.general.repo_root)
+
+    # Resolve relative db_path against the config directory
+    if not Path(config.general.db_path).is_absolute():
+        config.general.db_path = str(config_dir / config.general.db_path)
 
     logger.info(f"Repo root: {repo_root}")
     logger.info(f"Config: {explicit_config or (repo_root / 'adw-agent' / 'config.toml')}")
