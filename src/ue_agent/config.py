@@ -10,6 +10,7 @@ from pathlib import Path
 class GeneralConfig:
     poll_interval_seconds: int = 10
     db_path: str = "tasks.db"
+    repo_root: str = ""
 
 
 @dataclass

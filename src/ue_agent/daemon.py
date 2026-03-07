@@ -160,33 +160,73 @@ def _find_repo_root() -> Path:
     return cwd
 
 
+def _parse_args() -> tuple[str, Path | None]:
+    """Parse CLI arguments. Returns (subcommand, config_path_or_None)."""
+    import os
+
+    subcommand = "start"
+    config_path: Path | None = None
+
+    args = sys.argv[1:]
+    i = 0
+    while i < len(args):
+        if args[i] == "--config" and i + 1 < len(args):
+            config_path = Path(args[i + 1])
+            i += 2
+        elif args[i] in ("start", "queue"):
+            subcommand = args[i]
+            i += 1
+        else:
+            print(f"Unknown argument: {args[i]}")
+            print("Usage: ue-agent [start|queue] [--config PATH]")
+            sys.exit(1)
+
+    # Fallback: UE_AGENT_CONFIG env var
+    if config_path is None:
+        env_config = os.environ.get("UE_AGENT_CONFIG", "")
+        if env_config:
+            config_path = Path(env_config)
+
+    return subcommand, config_path
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
 
-    repo_root = _find_repo_root()
-    agent_dir = repo_root / "adw-agent"
+    subcommand, explicit_config = _parse_args()
 
-    subcommand = sys.argv[1] if len(sys.argv) > 1 else "start"
-
-    config = load_config(
-        config_path=agent_dir / "config.toml",
-        env_path=agent_dir / ".env",
-    )
+    if explicit_config:
+        # Explicit config: derive .env from same directory
+        config_path = explicit_config.resolve()
+        env_path = config_path.parent / ".env"
+        config = load_config(config_path=config_path, env_path=env_path)
+        # repo_root: from config, or parent of config dir (assumes config is in adw-agent/)
+        if config.general.repo_root:
+            repo_root = Path(config.general.repo_root)
+        else:
+            repo_root = config_path.parent.parent
+    else:
+        # Auto-detect from CWD (original behavior)
+        repo_root = _find_repo_root()
+        agent_dir = repo_root / "adw-agent"
+        config = load_config(
+            config_path=agent_dir / "config.toml",
+            env_path=agent_dir / ".env",
+        )
+        # Config repo_root overrides auto-detection
+        if config.general.repo_root:
+            repo_root = Path(config.general.repo_root)
 
     logger.info(f"Repo root: {repo_root}")
-    logger.info(f"Config: {agent_dir / 'config.toml'}")
+    logger.info(f"Config: {explicit_config or (repo_root / 'adw-agent' / 'config.toml')}")
 
     if subcommand == "queue":
         asyncio.run(show_queue(config))
     elif subcommand == "start":
         asyncio.run(run_daemon(config, str(repo_root)))
-    else:
-        print(f"Unknown subcommand: {subcommand}")
-        print("Usage: ue-agent [start|queue]")
-        sys.exit(1)
 
 
 if __name__ == "__main__":

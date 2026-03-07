@@ -1,6 +1,8 @@
 [general]
 poll_interval_seconds = 10
 db_path = "tasks.db"
+# Optional: explicit repo root for Claude sessions (auto-detected from CWD if omitted)
+# repo_root = "C:/Source/imp_UE_misc"
 
 [ue]
 engine_path = "C:/Program Files/Epic Games/UE_5.3/Engine"

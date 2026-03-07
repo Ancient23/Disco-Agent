@@ -154,9 +154,26 @@ Uses your existing Claude Code CLI login (Max plan). No `ANTHROPIC_API_KEY` need
 ## CLI
 
 ```bash
-ue-agent start    # Run the daemon (default)
+ue-agent start    # Run the daemon (auto-detect config from CWD)
 ue-agent queue    # Show current task queue in terminal
+
+# Explicit config path (works from any directory)
+ue-agent start --config /path/to/adw-agent/config.toml
+
+# Or via environment variable
+UE_AGENT_CONFIG=/path/to/config.toml ue-agent start
 ```
+
+Resolution order: `--config` flag > `UE_AGENT_CONFIG` env var > CWD auto-detection.
+
+To set an explicit repo root (where Claude sessions run), add to `config.toml`:
+
+```toml
+[general]
+repo_root = "C:/Source/imp_UE_misc"
+```
+
+If omitted, the repo root is auto-detected from the config file location or CWD.
 
 ## Running Tests
 
