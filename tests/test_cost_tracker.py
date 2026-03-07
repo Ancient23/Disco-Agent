@@ -1,6 +1,6 @@
 import pytest
 
-from ue_agent.cost_tracker import CostTracker
+from disco_agent.cost_tracker import CostTracker
 
 
 def test_initial_cost_is_zero():

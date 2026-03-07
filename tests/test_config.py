@@ -38,7 +38,7 @@ error_tail_lines = 100
     env_file = tmp_path / ".env"
     env_file.write_text("DISCORD_BOT_TOKEN=test-token-123\n")
 
-    from ue_agent.config import load_config
+    from disco_agent.config import load_config
 
     config = load_config(config_path=config_toml, env_path=env_file)
     assert config.general.poll_interval_seconds == 15
@@ -66,7 +66,7 @@ engine_path = "C:/UE5"
     env_file = tmp_path / ".env"
     env_file.write_text("DISCORD_BOT_TOKEN=tok\n")
 
-    from ue_agent.config import load_config
+    from disco_agent.config import load_config
 
     config = load_config(config_path=config_toml, env_path=env_file)
     assert config.general.poll_interval_seconds == 10
@@ -75,7 +75,7 @@ engine_path = "C:/UE5"
 
 
 def test_non_threaded_workflows_default_empty():
-    from ue_agent.config import AgentConfig
+    from disco_agent.config import AgentConfig
 
     config = AgentConfig()
     assert config.discord.non_threaded_workflows == []
@@ -95,7 +95,7 @@ non_threaded_workflows = ["compile"]
     env_file = tmp_path / ".env"
     env_file.write_text("DISCORD_BOT_TOKEN=tok\n")
 
-    from ue_agent.config import load_config
+    from disco_agent.config import load_config
 
     config = load_config(config_path=config_toml, env_path=env_file)
     assert config.discord.non_threaded_workflows == ["compile"]
@@ -109,7 +109,7 @@ def test_load_config_missing_token_raises(tmp_path):
 
     os.environ.pop("DISCORD_BOT_TOKEN", None)
 
-    from ue_agent.config import load_config
+    from disco_agent.config import load_config
 
     with pytest.raises(ValueError, match="DISCORD_BOT_TOKEN"):
         load_config(config_path=config_toml, env_path=env_file)

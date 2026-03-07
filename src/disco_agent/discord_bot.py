@@ -5,11 +5,11 @@ from typing import Any
 
 import discord
 
-from ue_agent.config import AgentConfig
-from ue_agent.queue import TaskQueue
-from ue_agent.session_history import format_session_for_prompt, get_history_dir, load_recent_sessions, search_sessions
-from ue_agent.utils import truncate_for_discord
-from ue_agent.workflows.base import WorkflowResult
+from disco_agent.config import AgentConfig
+from disco_agent.queue import TaskQueue
+from disco_agent.session_history import format_session_for_prompt, get_history_dir, load_recent_sessions, search_sessions
+from disco_agent.utils import truncate_for_discord
+from disco_agent.workflows.base import WorkflowResult
 
 logger = logging.getLogger(__name__)
 

@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from ue_agent.queue import TaskQueue
-from ue_agent.streaming import StreamingDiscordMessage
+from disco_agent.queue import TaskQueue
+from disco_agent.streaming import StreamingDiscordMessage
 
 logger = logging.getLogger(__name__)
 

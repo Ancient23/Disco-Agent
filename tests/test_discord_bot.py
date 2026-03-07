@@ -1,6 +1,6 @@
 import pytest
 
-from ue_agent.discord_bot import parse_command
+from disco_agent.discord_bot import parse_command
 
 
 def test_parse_build_command():
@@ -80,7 +80,7 @@ def test_parse_build_missing_project():
 
 
 async def test_notifier_create_thread():
-    from ue_agent.discord_bot import DiscordNotifier
+    from disco_agent.discord_bot import DiscordNotifier
     from unittest.mock import AsyncMock, MagicMock
 
     bot = MagicMock()
@@ -99,7 +99,7 @@ async def test_notifier_create_thread():
 
 
 async def test_notifier_send_to_thread():
-    from ue_agent.discord_bot import DiscordNotifier
+    from disco_agent.discord_bot import DiscordNotifier
     from unittest.mock import AsyncMock, MagicMock
 
     bot = MagicMock()
@@ -115,7 +115,7 @@ async def test_notifier_send_to_thread():
 
 
 async def test_notifier_edit_message():
-    from ue_agent.discord_bot import DiscordNotifier
+    from disco_agent.discord_bot import DiscordNotifier
     from unittest.mock import AsyncMock, MagicMock
 
     bot = MagicMock()

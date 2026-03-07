@@ -1,7 +1,7 @@
 import pytest
 
-from ue_agent.workflows import WORKFLOW_REGISTRY, register
-from ue_agent.workflows.base import BaseWorkflow, WorkflowResult
+from disco_agent.workflows import WORKFLOW_REGISTRY, register
+from disco_agent.workflows.base import BaseWorkflow, WorkflowResult
 
 
 async def test_register_decorator():
@@ -17,7 +17,7 @@ async def test_register_decorator():
 
 
 async def test_base_workflow_is_cancelled(tmp_path):
-    from ue_agent.queue import TaskQueue
+    from disco_agent.queue import TaskQueue
 
     q = TaskQueue(str(tmp_path / "test.db"))
     await q.initialize()
@@ -49,7 +49,7 @@ def _make_concrete_workflow(**kwargs):
 
 async def test_workflow_creates_thread_when_enabled():
     from unittest.mock import AsyncMock
-    from ue_agent.workflows.base import BaseWorkflow, WorkflowResult
+    from disco_agent.workflows.base import BaseWorkflow, WorkflowResult
 
     class FakeWorkflow(BaseWorkflow):
         async def execute(self) -> WorkflowResult:
@@ -75,7 +75,7 @@ async def test_workflow_creates_thread_when_enabled():
 
 async def test_workflow_skips_thread_when_disabled():
     from unittest.mock import AsyncMock
-    from ue_agent.workflows.base import BaseWorkflow, WorkflowResult
+    from disco_agent.workflows.base import BaseWorkflow, WorkflowResult
 
     class FakeWorkflow(BaseWorkflow):
         async def execute(self) -> WorkflowResult:
@@ -100,8 +100,8 @@ async def test_workflow_skips_thread_when_disabled():
 async def test_workflow_dispatch_roundtrip(tmp_path):
     """Full roundtrip: enqueue -> fetch -> build workflow -> run."""
     from unittest.mock import AsyncMock, patch
-    from ue_agent.queue import TaskQueue
-    from ue_agent.workflows.base import WorkflowResult
+    from disco_agent.queue import TaskQueue
+    from disco_agent.workflows.base import WorkflowResult
 
     q = TaskQueue(str(tmp_path / "test.db"))
     await q.initialize()
@@ -114,11 +114,11 @@ async def test_workflow_dispatch_roundtrip(tmp_path):
 
     notifier = AsyncMock()
 
-    import ue_agent.workflows.compile  # noqa: F401
-    from ue_agent.config import UEConfig, CompileConfig, BudgetConfig
+    import disco_agent.workflows.compile  # noqa: F401
+    from disco_agent.config import UEConfig, CompileConfig, BudgetConfig
 
-    with patch("ue_agent.workflows.compile.run_uat", return_value=(0, "ok", "")):
-        from ue_agent.workflows.compile import CompileWorkflow
+    with patch("disco_agent.workflows.compile.run_uat", return_value=(0, "ok", "")):
+        from disco_agent.workflows.compile import CompileWorkflow
         wf = CompileWorkflow(
             task=task, queue=q, notifier=notifier,
             ue_config=UEConfig(engine_path="C:/UE5"),

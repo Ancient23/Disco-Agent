@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from ue_agent.config import BudgetConfig, CompileConfig, UEConfig
-from ue_agent.queue import TaskQueue
-from ue_agent.workflows import register
-from ue_agent.workflows.base import Notifier
-from ue_agent.workflows.compile import CompileWorkflow
+from disco_agent.config import BudgetConfig, CompileConfig, UEConfig
+from disco_agent.queue import TaskQueue
+from disco_agent.workflows import register
+from disco_agent.workflows.base import Notifier
+from disco_agent.workflows.compile import CompileWorkflow
 
 
 @register("package")

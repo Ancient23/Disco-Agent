@@ -2,7 +2,7 @@
 
 import pytest
 
-from ue_agent.discord_bot import parse_command
+from disco_agent.discord_bot import parse_command
 
 
 class TestThreadReplyDetection:

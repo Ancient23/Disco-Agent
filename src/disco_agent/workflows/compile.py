@@ -8,12 +8,12 @@ from typing import Any
 from claude_agent_sdk import ClaudeAgentOptions, query
 from claude_agent_sdk.types import AssistantMessage, ResultMessage, TextBlock, ToolUseBlock
 
-from ue_agent.config import BudgetConfig, CompileConfig, UEConfig
-from ue_agent.cost_tracker import CostTracker
-from ue_agent.queue import TaskQueue
-from ue_agent.utils import tail_lines
-from ue_agent.workflows import register
-from ue_agent.workflows.base import BaseWorkflow, Notifier, WorkflowResult
+from disco_agent.config import BudgetConfig, CompileConfig, UEConfig
+from disco_agent.cost_tracker import CostTracker
+from disco_agent.queue import TaskQueue
+from disco_agent.utils import tail_lines
+from disco_agent.workflows import register
+from disco_agent.workflows.base import BaseWorkflow, Notifier, WorkflowResult
 
 logger = logging.getLogger(__name__)
 

@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from ue_agent.workflows.base import WorkflowResult
+from disco_agent.workflows.base import WorkflowResult
 
 
 @dataclass
@@ -43,8 +43,8 @@ def mock_notifier():
 
 
 async def test_compile_success(task, mock_queue, mock_notifier):
-    from ue_agent.config import CompileConfig, UEConfig, BudgetConfig
-    from ue_agent.workflows.compile import CompileWorkflow
+    from disco_agent.config import CompileConfig, UEConfig, BudgetConfig
+    from disco_agent.workflows.compile import CompileWorkflow
 
     wf = CompileWorkflow(
         task=task,
@@ -56,7 +56,7 @@ async def test_compile_success(task, mock_queue, mock_notifier):
         repo_root="C:/Source/imp_UE_misc",
     )
 
-    with patch("ue_agent.workflows.compile.run_uat") as mock_uat:
+    with patch("disco_agent.workflows.compile.run_uat") as mock_uat:
         mock_uat.return_value = (0, "Build succeeded", "")
         result = await wf.execute()
 
@@ -65,8 +65,8 @@ async def test_compile_success(task, mock_queue, mock_notifier):
 
 
 async def test_compile_fail_then_sdk_fix(task, mock_queue, mock_notifier):
-    from ue_agent.config import CompileConfig, UEConfig, BudgetConfig
-    from ue_agent.workflows.compile import CompileWorkflow
+    from disco_agent.config import CompileConfig, UEConfig, BudgetConfig
+    from disco_agent.workflows.compile import CompileWorkflow
 
     wf = CompileWorkflow(
         task=task,
@@ -92,8 +92,8 @@ async def test_compile_fail_then_sdk_fix(task, mock_queue, mock_notifier):
         yield msg
 
     with (
-        patch("ue_agent.workflows.compile.run_uat", side_effect=mock_uat_side_effect),
-        patch("ue_agent.workflows.compile.sdk_analyze_and_fix", side_effect=fake_query),
+        patch("disco_agent.workflows.compile.run_uat", side_effect=mock_uat_side_effect),
+        patch("disco_agent.workflows.compile.sdk_analyze_and_fix", side_effect=fake_query),
     ):
         result = await wf.execute()
 
@@ -102,8 +102,8 @@ async def test_compile_fail_then_sdk_fix(task, mock_queue, mock_notifier):
 
 
 async def test_compile_all_retries_exhausted(task, mock_queue, mock_notifier):
-    from ue_agent.config import CompileConfig, UEConfig, BudgetConfig
-    from ue_agent.workflows.compile import CompileWorkflow
+    from disco_agent.config import CompileConfig, UEConfig, BudgetConfig
+    from disco_agent.workflows.compile import CompileWorkflow
 
     wf = CompileWorkflow(
         task=task,
@@ -119,8 +119,8 @@ async def test_compile_all_retries_exhausted(task, mock_queue, mock_notifier):
         yield FakeMessage(type="result", result="Attempted fix", cost_usd=0.30)
 
     with (
-        patch("ue_agent.workflows.compile.run_uat", return_value=(1, "", "error")),
-        patch("ue_agent.workflows.compile.sdk_analyze_and_fix", side_effect=fake_query),
+        patch("disco_agent.workflows.compile.run_uat", return_value=(1, "", "error")),
+        patch("disco_agent.workflows.compile.sdk_analyze_and_fix", side_effect=fake_query),
     ):
         result = await wf.execute()
 
@@ -129,8 +129,8 @@ async def test_compile_all_retries_exhausted(task, mock_queue, mock_notifier):
 
 
 async def test_compile_cancelled_mid_retry(task, mock_queue, mock_notifier):
-    from ue_agent.config import CompileConfig, UEConfig, BudgetConfig
-    from ue_agent.workflows.compile import CompileWorkflow
+    from disco_agent.config import CompileConfig, UEConfig, BudgetConfig
+    from disco_agent.workflows.compile import CompileWorkflow
 
     mock_queue.is_cancelled = AsyncMock(side_effect=[False, True])
 
@@ -148,8 +148,8 @@ async def test_compile_cancelled_mid_retry(task, mock_queue, mock_notifier):
         yield FakeMessage(type="result", result="fix", cost_usd=0.10)
 
     with (
-        patch("ue_agent.workflows.compile.run_uat", return_value=(1, "", "error")),
-        patch("ue_agent.workflows.compile.sdk_analyze_and_fix", side_effect=fake_query),
+        patch("disco_agent.workflows.compile.run_uat", return_value=(1, "", "error")),
+        patch("disco_agent.workflows.compile.sdk_analyze_and_fix", side_effect=fake_query),
     ):
         result = await wf.execute()
 
