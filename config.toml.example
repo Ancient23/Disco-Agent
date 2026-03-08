@@ -2,13 +2,7 @@
 poll_interval_seconds = 10
 db_path = "tasks.db"
 # Optional: explicit repo root for Claude sessions (auto-detected from CWD if omitted)
-# repo_root = "C:/Source/imp_UE_misc"
-
-[ue]
-engine_path = "C:/Program Files/Epic Games/UE_5.3/Engine"
-project_path = "Proj/CitySample/CitySample.uproject"
-platform = "Win64"
-build_flags = ["-cook", "-stage", "-pak", "-unattended", "-nullrhi"]
+# repo_root = "C:/Source/my-project"
 
 [discord]
 command_channel_id = ""
@@ -16,16 +10,33 @@ required_role = "BuildOps"
 # Workflows that reply directly in the channel instead of creating a thread
 non_threaded_workflows = []
 
-[conductor]
-conductor_agent_path = "conductor-agent"
-
 [budgets]
-compile_warning_usd = 5.0
-package_warning_usd = 5.0
-submit_warning_usd = 2.0
 analyze_warning_usd = 3.0
 custom_warning_usd = 5.0
 
-[compile]
-max_retries = 3
-error_tail_lines = 200
+# --- Plugins ---
+# See README.md for full plugin documentation.
+
+# Session plugin example (external repo with its own .claude/commands/):
+# [[plugins]]
+# name = "conductor"
+# type = "session"
+# path = "C:/Source/conductor-agent"
+# commands = ["submit"]
+# budget_warning_usd = 2.0
+# allowed_tools = ["Read", "Glob", "Grep", "Bash", "Write"]
+
+# Code plugin example (UE build automation):
+# [[plugins]]
+# name = "ue"
+# type = "code"
+# path = "plugins/ue"
+#
+# [plugin-config.ue]
+# engine_path = "C:/Program Files/Epic Games/UE_5.7/Engine"
+# project_path = "Proj/MyProject/MyProject.uproject"
+# platform = "Win64"
+# build_flags = ["-cook", "-stage", "-pak", "-unattended", "-nullrhi"]
+# max_retries = 3
+# error_tail_lines = 200
+# ue_source_path = ""
