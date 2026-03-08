@@ -12,11 +12,10 @@ from disco_agent.queue import TaskQueue
 from disco_agent.workflows import WORKFLOW_REGISTRY
 
 # Import workflows to trigger @register decorators
-import disco_agent.workflows.compile  # noqa: F401
-import disco_agent.workflows.package  # noqa: F401
-import disco_agent.workflows.submit  # noqa: F401
 import disco_agent.workflows.analyze  # noqa: F401
 import disco_agent.workflows.custom  # noqa: F401
+
+from disco_agent.plugins import load_plugins
 
 logger = logging.getLogger("disco_agent")
 
@@ -31,26 +30,7 @@ def _build_workflow(
 ):
     cls = WORKFLOW_REGISTRY[workflow_name]
 
-    if workflow_name in ("compile", "package"):
-        return cls(
-            task=task,
-            queue=queue,
-            notifier=notifier,
-            ue_config=config.ue,
-            compile_config=config.compile,
-            budget_config=config.budgets,
-            repo_root=repo_root,
-        )
-    elif workflow_name == "submit":
-        return cls(
-            task=task,
-            queue=queue,
-            notifier=notifier,
-            conductor_config=config.conductor,
-            budget_config=config.budgets,
-            repo_root=repo_root,
-        )
-    elif workflow_name in ("analyze", "custom"):
+    if workflow_name in ("analyze", "custom"):
         return cls(
             task=task,
             queue=queue,
@@ -59,7 +39,13 @@ def _build_workflow(
             repo_root=repo_root,
         )
     else:
-        raise ValueError(f"Unknown workflow: {workflow_name}")
+        # Plugin workflow — session plugins take (task, queue, notifier, repo_root)
+        return cls(
+            task=task,
+            queue=queue,
+            notifier=notifier,
+            repo_root=repo_root,
+        )
 
 
 async def poll_loop(
@@ -204,6 +190,8 @@ def main():
     # Resolve relative db_path against the config directory
     if not Path(config.general.db_path).is_absolute():
         config.general.db_path = str(config_dir / config.general.db_path)
+
+    load_plugins(config.plugins_raw, config.plugin_configs, str(config_dir))
 
     logger.info(f"Repo root: {repo_root}")
     logger.info(f"Config: {explicit_config or (repo_root / 'config.toml')}")
