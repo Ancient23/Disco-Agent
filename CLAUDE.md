@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Disco-Agent (package name: `ue-agent`) is a Python daemon that automates Unreal Engine compile, package, and Conductor submission workflows via Discord commands. It uses the Claude Agent SDK for intelligent build error analysis and automated fixes.
+Disco-Agent is a general-purpose Discord-to-Claude automation daemon with a plugin system. It receives commands via Discord, queues them in SQLite, and executes them as Claude Agent SDK sessions. Ships with built-in `analyze` (read-only) and `custom` (read-write) workflows. Domain-specific functionality (e.g., Unreal Engine builds) is added through plugins.
 
 ## Development Commands
 
@@ -13,19 +13,19 @@ Disco-Agent (package name: `ue-agent`) is a Python daemon that automates Unreal 
 uv sync
 
 # Run the daemon (dev mode, uses local source)
-uv run ue-agent start
+uv run disco-agent start
 
 # Run all tests
 uv run pytest -v
 
 # Run a single test file
-uv run pytest tests/test_queue.py -v
+uv run pytest tests/test_foo.py -v
 
 # Run a single test function
 uv run pytest tests/test_queue.py::test_enqueue_and_fetch -v
 
 # Rebuild global install after code changes
-uv cache clean ue-agent && uv tool install . --reinstall
+uv cache clean disco-agent && uv tool install . --reinstall
 ```
 
 ## Architecture
@@ -36,31 +36,47 @@ The system follows a queue-based architecture:
 Discord bot (on_message) --> SQLite queue --> Daemon poll loop --> Workflow dispatcher
 ```
 
-**Entry point:** `src/ue_agent/daemon.py:main()` runs the Discord bot and poll loop concurrently via `asyncio.gather`.
+**Entry point:** `src/disco_agent/daemon.py:main()` runs the Discord bot and poll loop concurrently via `asyncio.gather`.
 
-**Configuration:** `config.py` loads `config.toml` (TOML) + `.env` (bot token) into `AgentConfig` dataclasses. Resolution order: `--config` flag > `UE_AGENT_CONFIG` env > CWD auto-detection.
+**Configuration:** `config.py` loads `config.toml` (TOML) + `.env` (bot token) into `AgentConfig` dataclasses. Resolution order: `--config` flag > `DISCO_AGENT_CONFIG` env > CWD auto-detection.
 
 **Task queue:** `queue.py` uses `aiosqlite` with a single `tasks` table. `fetch_next()` atomically claims the oldest pending task via `UPDATE ... RETURNING *`.
 
-**Workflow registry:** Workflows self-register via `@register("name")` decorator in `workflows/__init__.py`. The daemon imports all workflow modules in `daemon.py` to trigger registration. New workflows only need a file in `workflows/`, a `@register` decorator, and a command parser entry in `discord_bot.py`.
+**Workflow registry:** Workflows self-register via `@register("name")` decorator in `workflows/__init__.py`. The daemon imports built-in workflow modules in `daemon.py` to trigger registration. Plugin workflows are registered at startup by the plugin loader.
 
 **BaseWorkflow** (`workflows/base.py`): All workflows inherit from this ABC. `run()` handles thread creation, status posting, and result reporting. Subclasses implement `execute() -> WorkflowResult`.
 
-**Workflow types and their Claude Agent SDK access:**
-- `compile` / `package`: Runs `RunUAT.bat BuildCookRun` subprocess. On failure, spawns a Claude session with read/write tools to analyze and fix errors. Retries up to `max_retries`.
-- `analyze`: Read-only Claude session (tools: Read, Glob, Grep, Bash).
-- `custom`: Read/write Claude session (adds Edit, Write). Also handles thread replies.
-- `submit`: Claude session pointed at the `conductor-agent/` directory.
+**AgentSessionWorkflow** (`workflows/session.py`): Base class for workflows that delegate to a Claude Agent SDK session. Handles session creation, streaming output to Discord, history injection, and cost tracking. Both built-in workflows (`analyze`, `custom`) and session plugins extend this.
 
-**Discord threading:** Every command creates a Discord thread for output. `StreamingDiscordMessage` (`streaming.py`) implements edit-in-place message streaming with rollover when messages exceed Discord's character limit. Thread replies (non-`!` messages in active threads) are routed to `custom` workflow with full thread history as context.
+**Plugin system** (`plugins.py`): At startup, `load_plugins()` iterates over `[[plugins]]` entries from config.toml. Session plugins dynamically create `AgentSessionWorkflow` subclasses. Code plugins import a `workflows.py` module via `importlib`. All plugin commands are registered in `WORKFLOW_REGISTRY` alongside built-ins.
 
-**Session history:** `session_history.py` persists completed sessions as JSON files in `chat_history/`. Injected into new Claude prompts so sessions have memory of previous interactions.
+## Built-in Workflows
 
-**Cost tracking:** `CostTracker` emits a one-time warning to Discord when a session exceeds its per-workflow budget threshold (soft limit, no hard stop).
+- `analyze` (`workflows/analyze.py`): Read-only Claude session. Tools: Read, Glob, Grep, Bash.
+- `custom` (`workflows/custom.py`): Read/write Claude session. Tools: Read, Glob, Grep, Bash, Edit, Write. Also handles thread replies.
+
+## Plugin System
+
+Two plugin types:
+
+- **Session plugins** (`type = "session"`): Config-only. Each command in the plugin's `commands` list gets a dynamically generated `AgentSessionWorkflow` subclass that runs in the plugin's `path` directory.
+- **Code plugins** (`type = "code"`): Python workflows loaded from `<path>/workflows.py`. The module is imported via `importlib.util` and must use `@register()` to add workflows. Optional `set_plugin_config(raw_dict)` receives the `[plugin-config.<name>]` section.
+
+Plugin configs live in `config.toml` under `[[plugins]]` (plugin definition) and `[plugin-config.<name>]` (plugin-specific settings).
+
+## UE Plugin
+
+Lives in `plugins/ue/`. Loaded as a code plugin. Provides:
+
+- `plugins/ue/config.py`: `UEPluginConfig` dataclass, `load_ue_config()` parser
+- `plugins/ue/workflows.py`: `CompileWorkflow` (`!build`) and `PackageWorkflow` (`!package`) -- runs RunUAT.bat, on failure spawns Claude session for error analysis/retry
+
+The UE plugin is not loaded unless configured in `config.toml` with a `[[plugins]]` entry of `type = "code"` and `path = "plugins/ue"`.
 
 ## Key Conventions
 
 - All async code uses `asyncio` (no threads). Tests use `pytest-asyncio` with `asyncio_mode = "auto"`.
-- Config dataclasses use stdlib `dataclasses`, not Pydantic (despite Pydantic being a dependency -- it's for future use or the Agent SDK).
+- Config dataclasses use stdlib `dataclasses`, not Pydantic (Pydantic is a dependency for the Agent SDK).
 - Discord message content is truncated to 1900 chars via `truncate_for_discord()`.
 - The `Notifier` protocol in `base.py` decouples workflows from the Discord client, making testing easier.
+- Plugin commands must not conflict with built-in workflow names; the loader raises `ValueError` on collision.
