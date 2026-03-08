@@ -39,7 +39,7 @@ name = "ue"
 type = "code"
 path = "plugins/ue"
 
-[plugins.ue]
+[plugin-config.ue]
 engine_path = "C:/Program Files/Epic Games/UE_5.7/Engine"
 project_path = "Proj/MyProject/MyProject.uproject"
 platform = "Win64"
@@ -55,7 +55,7 @@ ue_source_path = ""
 1. Read `[[plugins]]` array from config
 2. For `type = "session"`: dynamically create a workflow class (subclass of `AgentSessionWorkflow`) and register it for each command name
 3. For `type = "code"`: `importlib.import_module` on `workflows.py` at the given path, triggering `@register` decorators
-4. Plugin-specific config sections (`[plugins.ue]`) passed to code plugins as a dict
+4. Plugin-specific config sections (`[plugin-config.ue]`) passed to code plugins as a dict
 
 Conflict detection: if two plugins register the same command name, fail at startup with a clear error.
 
@@ -183,7 +183,7 @@ custom_warning_usd = 5.0
 # type = "code"
 # path = "plugins/ue"
 #
-# [plugins.ue]
+# [plugin-config.ue]
 # engine_path = "C:/Program Files/Epic Games/UE_5.7/Engine"
 # project_path = "Proj/MyProject/MyProject.uproject"
 # platform = "Win64"
@@ -195,7 +195,7 @@ custom_warning_usd = 5.0
 
 ## UE plugin: ue-research command
 
-- UE source path read from `ue_source_path` in `[plugins.ue]` config, substituted into the command template as `$UE_SOURCE_PATH`
+- UE source path read from `ue_source_path` in `[plugin-config.ue]` config, substituted into the command template as `$UE_SOURCE_PATH`
 - Repo source locations auto-discovered: scans for `*.Build.cs`, `Source/` directories, `.uproject` files
 - All UE version references default to 5.7
 
@@ -205,7 +205,7 @@ custom_warning_usd = 5.0
 1. Detecting UE engine install path
 2. Setting `ue_source_path` (optional, for ue-research)
 3. Finding `.uproject` file
-4. Writing the `[[plugins]]` and `[plugins.ue]` entries into `config.toml`
+4. Writing the `[[plugins]]` and `[plugin-config.ue]` entries into `config.toml`
 
 ## Tests
 

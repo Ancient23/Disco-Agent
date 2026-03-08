@@ -64,6 +64,7 @@ def test_parse_dynamic_plugin_command():
     finally:
         del WORKFLOW_REGISTRY["deploy"]
 
+
 def test_parse_unregistered_command_returns_none():
     cmd = parse_command("!nonexistent something")
     assert cmd is None
