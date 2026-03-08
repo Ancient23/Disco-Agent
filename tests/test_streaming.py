@@ -1,7 +1,7 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 import pytest
-from ue_agent.streaming import StreamingDiscordMessage
+from disco_agent.streaming import StreamingDiscordMessage
 
 
 @pytest.fixture

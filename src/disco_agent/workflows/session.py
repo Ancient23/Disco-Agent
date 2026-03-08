@@ -7,41 +7,44 @@ from typing import Any
 from claude_agent_sdk import ClaudeAgentOptions, query
 from claude_agent_sdk.types import AssistantMessage, ResultMessage, TextBlock, ToolUseBlock
 
-from ue_agent.config import BudgetConfig
-from ue_agent.cost_tracker import CostTracker
-from ue_agent.queue import TaskQueue
-from ue_agent.session_history import get_history_dir, inject_history_context, save_session
-from ue_agent.workflows import register
-from ue_agent.workflows.base import BaseWorkflow, Notifier, WorkflowResult
+from disco_agent.cost_tracker import CostTracker
+from disco_agent.queue import TaskQueue
+from disco_agent.session_history import get_history_dir, inject_history_context, save_session
+from disco_agent.workflows.base import BaseWorkflow, Notifier, WorkflowResult
 
 logger = logging.getLogger(__name__)
 
 
-@register("analyze")
-class AnalyzeWorkflow(BaseWorkflow):
+class AgentSessionWorkflow(BaseWorkflow):
+    """Workflow that delegates to a Claude Agent SDK session in a given directory."""
+
     def __init__(
         self,
         task: dict[str, Any],
         queue: TaskQueue,
         notifier: Notifier,
-        budget_config: BudgetConfig,
+        session_cwd: str,
+        allowed_tools: list[str],
+        budget_warning_usd: float,
         repo_root: str,
     ):
         super().__init__(task=task, queue=queue, notifier=notifier)
-        self.cost_tracker = CostTracker(budget_config.analyze_warning_usd)
+        self.session_cwd = session_cwd
+        self.allowed_tools = allowed_tools
+        self.cost_tracker = CostTracker(budget_warning_usd)
         self.repo_root = repo_root
         self.history_dir = get_history_dir(repo_root)
 
     async def execute(self) -> WorkflowResult:
         params = json.loads(self.task["params"]) if isinstance(self.task["params"], str) else self.task["params"]
-        question = params.get("prompt", "")
+        prompt = params.get("prompt", "")
 
-        if not question:
-            return WorkflowResult(success=False, error="No question provided")
+        if not prompt:
+            return WorkflowResult(success=False, error="No prompt provided")
 
         full_prompt = inject_history_context(
-            question,
-            instruction="Answer the following question:",
+            prompt,
+            instruction="Execute the following request:",
             history_dir=self.history_dir,
         )
 
@@ -50,8 +53,8 @@ class AnalyzeWorkflow(BaseWorkflow):
         async for message in query(
             prompt=full_prompt,
             options=ClaudeAgentOptions(
-                allowed_tools=["Read", "Glob", "Grep", "Bash"],
-                cwd=self.repo_root,
+                allowed_tools=self.allowed_tools,
+                cwd=self.session_cwd,
                 permission_mode="bypassPermissions",
             ),
         ):
@@ -59,10 +62,8 @@ class AnalyzeWorkflow(BaseWorkflow):
                 for block in message.content:
                     if isinstance(block, TextBlock) and stream:
                         await stream.append(block.text)
-                        logger.info("Claude: %s", block.text[:200])
                     elif isinstance(block, ToolUseBlock) and stream:
                         await stream.append_tool_use(block.name, block.input)
-                        logger.info("Tool: %s", block.name)
             elif isinstance(message, ResultMessage):
                 if message.total_cost_usd is not None:
                     for w in self.cost_tracker.add_cost(message.total_cost_usd):
@@ -73,11 +74,10 @@ class AnalyzeWorkflow(BaseWorkflow):
         if stream:
             await stream.finalize()
 
-        # Persist this session for future reference
         save_session(
             task_id=self.task_id,
-            workflow="analyze",
-            prompt=question,
+            workflow=self.task["workflow"],
+            prompt=prompt,
             output=sdk_output,
             cost_usd=self.cost_tracker.total_cost_usd,
             requested_by=self.task.get("requested_by", ""),

@@ -6,19 +6,18 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from ue_agent.config import AgentConfig, load_config
-from ue_agent.discord_bot import DiscordNotifier, create_bot
-from ue_agent.queue import TaskQueue
-from ue_agent.workflows import WORKFLOW_REGISTRY
+from disco_agent.config import AgentConfig, load_config
+from disco_agent.discord_bot import DiscordNotifier, create_bot
+from disco_agent.queue import TaskQueue
+from disco_agent.workflows import WORKFLOW_REGISTRY
 
 # Import workflows to trigger @register decorators
-import ue_agent.workflows.compile  # noqa: F401
-import ue_agent.workflows.package  # noqa: F401
-import ue_agent.workflows.submit  # noqa: F401
-import ue_agent.workflows.analyze  # noqa: F401
-import ue_agent.workflows.custom  # noqa: F401
+import disco_agent.workflows.analyze  # noqa: F401
+import disco_agent.workflows.custom  # noqa: F401
 
-logger = logging.getLogger("ue_agent")
+from disco_agent.plugins import load_plugins
+
+logger = logging.getLogger("disco_agent")
 
 
 def _build_workflow(
@@ -31,26 +30,7 @@ def _build_workflow(
 ):
     cls = WORKFLOW_REGISTRY[workflow_name]
 
-    if workflow_name in ("compile", "package"):
-        return cls(
-            task=task,
-            queue=queue,
-            notifier=notifier,
-            ue_config=config.ue,
-            compile_config=config.compile,
-            budget_config=config.budgets,
-            repo_root=repo_root,
-        )
-    elif workflow_name == "submit":
-        return cls(
-            task=task,
-            queue=queue,
-            notifier=notifier,
-            conductor_config=config.conductor,
-            budget_config=config.budgets,
-            repo_root=repo_root,
-        )
-    elif workflow_name in ("analyze", "custom"):
+    if workflow_name in ("analyze", "custom"):
         return cls(
             task=task,
             queue=queue,
@@ -59,7 +39,13 @@ def _build_workflow(
             repo_root=repo_root,
         )
     else:
-        raise ValueError(f"Unknown workflow: {workflow_name}")
+        # Plugin workflow — session plugins take (task, queue, notifier, repo_root)
+        return cls(
+            task=task,
+            queue=queue,
+            notifier=notifier,
+            repo_root=repo_root,
+        )
 
 
 async def poll_loop(
@@ -134,29 +120,9 @@ async def run_daemon(config: AgentConfig, repo_root: str):
 
 
 def _find_repo_root() -> Path:
-    """Find the repo root by looking for adw-agent/ with config files.
-
-    Search order:
-    1. Current working directory IS adw-agent/ (cwd has config.toml or pyproject.toml)
-    2. Current working directory contains adw-agent/
-    3. Walk up from cwd looking for adw-agent/
-    """
     cwd = Path.cwd()
-
-    # cwd is the adw-agent directory itself
-    if (cwd / "pyproject.toml").exists() and (cwd / "src" / "ue_agent").exists():
-        return cwd.parent
-
-    # cwd contains adw-agent/
-    if (cwd / "adw-agent" / "pyproject.toml").exists():
+    if (cwd / "pyproject.toml").exists() and (cwd / "src" / "disco_agent").exists():
         return cwd
-
-    # Walk up from cwd
-    for parent in cwd.parents:
-        if (parent / "adw-agent" / "pyproject.toml").exists():
-            return parent
-
-    # Fallback: assume cwd is repo root
     return cwd
 
 
@@ -178,12 +144,12 @@ def _parse_args() -> tuple[str, Path | None]:
             i += 1
         else:
             print(f"Unknown argument: {args[i]}")
-            print("Usage: ue-agent [start|queue] [--config PATH]")
+            print("Usage: disco-agent [start|queue] [--config PATH]")
             sys.exit(1)
 
-    # Fallback: UE_AGENT_CONFIG env var
+    # Fallback: DISCO_AGENT_CONFIG env var
     if config_path is None:
-        env_config = os.environ.get("UE_AGENT_CONFIG", "")
+        env_config = os.environ.get("DISCO_AGENT_CONFIG", "")
         if env_config:
             config_path = Path(env_config)
 
@@ -204,7 +170,7 @@ def main():
         config_dir = config_path.parent
         env_path = config_dir / ".env"
         config = load_config(config_path=config_path, env_path=env_path)
-        # repo_root: from config, or parent of config dir (assumes config is in adw-agent/)
+        # repo_root: from config, or parent of config dir
         if config.general.repo_root:
             repo_root = Path(config.general.repo_root)
         else:
@@ -212,7 +178,7 @@ def main():
     else:
         # Auto-detect from CWD (original behavior)
         repo_root = _find_repo_root()
-        config_dir = repo_root / "adw-agent"
+        config_dir = repo_root
         config = load_config(
             config_path=config_dir / "config.toml",
             env_path=config_dir / ".env",
@@ -225,8 +191,10 @@ def main():
     if not Path(config.general.db_path).is_absolute():
         config.general.db_path = str(config_dir / config.general.db_path)
 
+    load_plugins(config.plugins_raw, config.plugin_configs, str(config_dir))
+
     logger.info(f"Repo root: {repo_root}")
-    logger.info(f"Config: {explicit_config or (repo_root / 'adw-agent' / 'config.toml')}")
+    logger.info(f"Config: {explicit_config or (repo_root / 'config.toml')}")
 
     if subcommand == "queue":
         asyncio.run(show_queue(config))

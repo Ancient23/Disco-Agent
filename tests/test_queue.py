@@ -5,7 +5,7 @@ import pytest
 
 @pytest.fixture
 async def queue(tmp_path):
-    from ue_agent.queue import TaskQueue
+    from disco_agent.queue import TaskQueue
 
     db_path = str(tmp_path / "test.db")
     q = TaskQueue(db_path)

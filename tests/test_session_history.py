@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from ue_agent.session_history import (
+from disco_agent.session_history import (
     build_history_context,
     format_session_for_prompt,
     get_history_dir,
@@ -141,21 +141,21 @@ class TestParseHistoryCommand:
     """Test that parse_command handles !history correctly."""
 
     def test_history_no_args(self):
-        from ue_agent.discord_bot import parse_command
+        from disco_agent.discord_bot import parse_command
         cmd = parse_command("!history")
         assert cmd is not None
         assert cmd["workflow"] == "__history"
         assert cmd["params"]["search"] == ""
 
     def test_history_with_search(self):
-        from ue_agent.discord_bot import parse_command
+        from disco_agent.discord_bot import parse_command
         cmd = parse_command("!history crash bug")
         assert cmd is not None
         assert cmd["workflow"] == "__history"
         assert cmd["params"]["search"] == "crash bug"
 
     def test_history_with_quoted_search(self):
-        from ue_agent.discord_bot import parse_command
+        from disco_agent.discord_bot import parse_command
         cmd = parse_command('!history "frame 200"')
         assert cmd is not None
         assert cmd["params"]["search"] == "frame 200"
@@ -164,7 +164,7 @@ class TestParseHistoryCommand:
 class TestGetHistoryDir:
     def test_returns_canonical_path(self):
         result = get_history_dir("/some/repo")
-        assert result.replace("\\", "/").endswith("adw-agent/chat_history")
+        assert result.replace("\\", "/").endswith("chat_history")
         assert result.replace("\\", "/").startswith("/some/repo")
 
 

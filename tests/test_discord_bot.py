@@ -1,35 +1,6 @@
 import pytest
 
-from ue_agent.discord_bot import parse_command
-
-
-def test_parse_build_command():
-    cmd = parse_command("!build CitySample")
-    assert cmd is not None
-    assert cmd["workflow"] == "compile"
-    assert cmd["project"] == "CitySample"
-    assert cmd["platform"] == "Win64"
-
-
-def test_parse_package_command():
-    cmd = parse_command("!package CitySample Linux")
-    assert cmd is not None
-    assert cmd["workflow"] == "package"
-    assert cmd["project"] == "CitySample"
-    assert cmd["platform"] == "Linux"
-
-
-def test_parse_package_default_platform():
-    cmd = parse_command("!package CitySample")
-    assert cmd["platform"] == "Win64"
-
-
-def test_parse_submit_command():
-    cmd = parse_command("!submit CitySample --dry-run --app citysample")
-    assert cmd is not None
-    assert cmd["workflow"] == "submit"
-    assert cmd["project"] == "CitySample"
-    assert cmd["params"]["options"] == "--dry-run --app citysample"
+from disco_agent.discord_bot import parse_command
 
 
 def test_parse_analyze_command():
@@ -74,13 +45,33 @@ def test_parse_non_command():
     assert cmd is None
 
 
-def test_parse_build_missing_project():
-    cmd = parse_command("!build")
+def test_parse_dynamic_plugin_command():
+    """A command matching a registered workflow should parse dynamically."""
+    from disco_agent.workflows import WORKFLOW_REGISTRY
+    from disco_agent.workflows.base import BaseWorkflow, WorkflowResult
+
+    class FakeWorkflow(BaseWorkflow):
+        async def execute(self):
+            return WorkflowResult(success=True)
+
+    WORKFLOW_REGISTRY["deploy"] = FakeWorkflow
+    try:
+        cmd = parse_command("!deploy my-app --region us-east-1")
+        assert cmd is not None
+        assert cmd["workflow"] == "deploy"
+        assert cmd["project"] == "my-app"
+        assert "--region us-east-1" in cmd["params"]["raw_args"]
+    finally:
+        del WORKFLOW_REGISTRY["deploy"]
+
+
+def test_parse_unregistered_command_returns_none():
+    cmd = parse_command("!nonexistent something")
     assert cmd is None
 
 
 async def test_notifier_create_thread():
-    from ue_agent.discord_bot import DiscordNotifier
+    from disco_agent.discord_bot import DiscordNotifier
     from unittest.mock import AsyncMock, MagicMock
 
     bot = MagicMock()
@@ -99,7 +90,7 @@ async def test_notifier_create_thread():
 
 
 async def test_notifier_send_to_thread():
-    from ue_agent.discord_bot import DiscordNotifier
+    from disco_agent.discord_bot import DiscordNotifier
     from unittest.mock import AsyncMock, MagicMock
 
     bot = MagicMock()
@@ -115,7 +106,7 @@ async def test_notifier_send_to_thread():
 
 
 async def test_notifier_edit_message():
-    from ue_agent.discord_bot import DiscordNotifier
+    from disco_agent.discord_bot import DiscordNotifier
     from unittest.mock import AsyncMock, MagicMock
 
     bot = MagicMock()

@@ -5,11 +5,12 @@ from typing import Any
 
 import discord
 
-from ue_agent.config import AgentConfig
-from ue_agent.queue import TaskQueue
-from ue_agent.session_history import format_session_for_prompt, get_history_dir, load_recent_sessions, search_sessions
-from ue_agent.utils import truncate_for_discord
-from ue_agent.workflows.base import WorkflowResult
+from disco_agent.config import AgentConfig
+from disco_agent.queue import TaskQueue
+from disco_agent.session_history import format_session_for_prompt, get_history_dir, load_recent_sessions, search_sessions
+from disco_agent.utils import truncate_for_discord
+from disco_agent.workflows import WORKFLOW_REGISTRY
+from disco_agent.workflows.base import WorkflowResult
 
 logger = logging.getLogger(__name__)
 
@@ -22,41 +23,6 @@ def parse_command(text: str) -> dict[str, Any] | None:
     parts = text.split(None, 1)
     cmd = parts[0].lower()
     rest = parts[1] if len(parts) > 1 else ""
-
-    if cmd == "!build":
-        if not rest:
-            return None
-        tokens = rest.split()
-        return {
-            "workflow": "compile",
-            "project": tokens[0],
-            "platform": tokens[1] if len(tokens) > 1 else "Win64",
-            "params": {},
-        }
-
-    if cmd == "!package":
-        if not rest:
-            return None
-        tokens = rest.split()
-        return {
-            "workflow": "package",
-            "project": tokens[0],
-            "platform": tokens[1] if len(tokens) > 1 else "Win64",
-            "params": {},
-        }
-
-    if cmd == "!submit":
-        if not rest:
-            return None
-        tokens = rest.split(None, 1)
-        project = tokens[0]
-        options = tokens[1] if len(tokens) > 1 else ""
-        return {
-            "workflow": "submit",
-            "project": project,
-            "platform": "Win64",
-            "params": {"options": options},
-        }
 
     if cmd == "!analyze":
         if not rest:
@@ -97,6 +63,16 @@ def parse_command(text: str) -> dict[str, Any] | None:
 
     if cmd == "!help":
         return {"workflow": "__help", "project": "", "platform": "", "params": {}}
+
+    # Dynamic plugin commands
+    cmd_name = cmd[1:]  # strip the !
+    if cmd_name in WORKFLOW_REGISTRY:
+        return {
+            "workflow": cmd_name,
+            "project": rest.split()[0] if rest else "",
+            "platform": "",
+            "params": {"prompt": rest, "raw_args": rest},
+        }
 
     return None
 
@@ -244,32 +220,32 @@ def create_bot(config: AgentConfig, queue: TaskQueue, repo_root: str = "") -> di
             return
 
         if parsed["workflow"] == "__help":
-            help_text = (
-                "**UE Build Agent Commands**\n"
-                "```\n"
-                "!build <project> [platform]     Compile via RunUAT (auto-fix on failure)\n"
-                "!package <project> [platform]   Package (compile + cook + stage + pak)\n"
-                "!submit <project> [options]     Submit Conductor render job\n"
-                '!analyze "<question>"            Research the codebase (read-only)\n'
-                '!run "<prompt>"                  Freeform Claude session (read/write)\n'
-                '!history [search]               Show past sessions (optional keyword search)\n'
-                "!status                         Show task queue\n"
-                "!cancel                         Cancel all active tasks\n"
-                "!help                           Show this message\n"
-                "```\n"
-                "**Examples**\n"
-                "```\n"
-                "!build CitySample\n"
-                "!package CitySample Win64\n"
-                "!submit CitySample --dry-run\n"
-                '!analyze "why does the 4D capture crash on frame 200"\n'
-                '!run "add error handling to s3_upload.py"\n'
-                "!history crash\n"
-                "```"
-                "\n**Thread Replies**\n"
-                "Reply in a task thread to continue the conversation — no `!` command needed.\n"
+            # Built-in commands
+            help_lines = [
+                "**Disco-Agent Commands**",
+                "```",
+                '!analyze "<question>"            Research the codebase (read-only)',
+                '!run "<prompt>"                  Freeform Claude session (read/write)',
+                "!history [search]               Show past sessions (optional keyword search)",
+                "!status                         Show task queue",
+                "!cancel                         Cancel all active tasks",
+                "!help                           Show this message",
+            ]
+            # Plugin commands
+            plugin_cmds = sorted(
+                name for name in WORKFLOW_REGISTRY
+                if name not in ("analyze", "custom")
             )
-            await message.channel.send(help_text)
+            if plugin_cmds:
+                help_lines.append("")
+                help_lines.append("--- Plugins ---")
+                for cmd in plugin_cmds:
+                    help_lines.append(f"!{cmd}")
+            help_lines.append("```")
+            help_lines.append("")
+            help_lines.append("**Thread Replies**")
+            help_lines.append("Reply in a task thread to continue the conversation — no `!` command needed.")
+            await message.channel.send("\n".join(help_lines))
             return
 
         if parsed["workflow"] == "__status":
