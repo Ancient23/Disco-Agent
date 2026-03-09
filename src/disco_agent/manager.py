@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import os
 import signal
 import sys
@@ -9,6 +11,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -109,3 +113,48 @@ def parse_instances_config(path: Path) -> InstancesConfig:
         instances=instances,
         base_dir=base_dir,
     )
+
+
+class InstanceRunner:
+    """Manages a single disco-agent child process."""
+
+    def __init__(self, name: str, cmd: list[str], env: dict[str, str]):
+        self.name = name
+        self.cmd = cmd
+        self.env = env
+        self.process: asyncio.subprocess.Process | None = None
+        self.on_output: Any = None  # callback(line: str)
+
+    async def start(self) -> None:
+        self.process = await asyncio.create_subprocess_exec(
+            *self.cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            env=self.env,
+        )
+        asyncio.create_task(self._read_output())
+
+    async def _read_output(self) -> None:
+        assert self.process and self.process.stdout
+        while True:
+            line_bytes = await self.process.stdout.readline()
+            if not line_bytes:
+                break
+            line = line_bytes.decode("utf-8", errors="replace").rstrip()
+            prefixed = f"[{self.name}] {line}"
+            if self.on_output:
+                self.on_output(prefixed)
+            else:
+                print(prefixed, flush=True)
+
+    async def wait(self) -> int:
+        assert self.process
+        return await self.process.wait()
+
+    def terminate(self) -> None:
+        if self.process and self.process.returncode is None:
+            self.process.terminate()
+
+    def kill(self) -> None:
+        if self.process and self.process.returncode is None:
+            self.process.kill()

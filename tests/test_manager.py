@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -146,3 +147,44 @@ def test_parse_env_file_missing(tmp_path):
 
     result = parse_env_file(tmp_path / "nope.env")
     assert result == {}
+
+
+async def test_spawn_instance_captures_prefixed_output(tmp_path):
+    """Spawning an instance prefixes its stdout with [name]."""
+    from disco_agent.manager import InstanceRunner
+
+    # Create a script that prints a line and exits
+    script = tmp_path / "echo_script.py"
+    script.write_text('import sys; print("hello from child"); sys.exit(0)')
+
+    runner = InstanceRunner(
+        name="test-inst",
+        cmd=[sys.executable, str(script)],
+        env=dict(os.environ),
+    )
+
+    lines = []
+    runner.on_output = lambda line: lines.append(line)
+
+    await runner.start()
+    await runner.wait()
+
+    assert any("[test-inst]" in line and "hello from child" in line for line in lines)
+
+
+async def test_spawn_instance_returns_exit_code(tmp_path):
+    """InstanceRunner captures the child exit code."""
+    from disco_agent.manager import InstanceRunner
+
+    script = tmp_path / "exit_script.py"
+    script.write_text("import sys; sys.exit(42)")
+
+    runner = InstanceRunner(
+        name="exiter",
+        cmd=[sys.executable, str(script)],
+        env=dict(os.environ),
+    )
+
+    await runner.start()
+    code = await runner.wait()
+    assert code == 42
