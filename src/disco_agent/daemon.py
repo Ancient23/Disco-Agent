@@ -126,34 +126,42 @@ def _find_repo_root() -> Path:
     return cwd
 
 
-def _parse_args() -> tuple[str, Path | None]:
-    """Parse CLI arguments. Returns (subcommand, config_path_or_None)."""
+def _parse_args() -> tuple[str, dict[str, Any]]:
+    """Parse CLI arguments. Returns (subcommand, options_dict)."""
     import os
 
     subcommand = "start"
-    config_path: Path | None = None
+    options: dict[str, Any] = {}
+
+    valid_subcommands = {"start", "queue", "start-all", "status", "stop-all", "install-service", "uninstall-service"}
 
     args = sys.argv[1:]
     i = 0
     while i < len(args):
         if args[i] == "--config" and i + 1 < len(args):
-            config_path = Path(args[i + 1])
+            options["config"] = Path(args[i + 1])
             i += 2
-        elif args[i] in ("start", "queue"):
+        elif args[i] == "--instances" and i + 1 < len(args):
+            options["instances"] = Path(args[i + 1])
+            i += 2
+        elif args[i] == "--only" and i + 1 < len(args):
+            options["only"] = args[i + 1]
+            i += 2
+        elif args[i] in valid_subcommands:
             subcommand = args[i]
             i += 1
         else:
             print(f"Unknown argument: {args[i]}")
-            print("Usage: disco-agent [start|queue] [--config PATH]")
+            print("Usage: disco-agent [start|queue|start-all|status|stop-all|install-service|uninstall-service]")
             sys.exit(1)
 
     # Fallback: DISCO_AGENT_CONFIG env var
-    if config_path is None:
+    if "config" not in options:
         env_config = os.environ.get("DISCO_AGENT_CONFIG", "")
         if env_config:
-            config_path = Path(env_config)
+            options["config"] = Path(env_config)
 
-    return subcommand, config_path
+    return subcommand, options
 
 
 def main():
@@ -162,7 +170,63 @@ def main():
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
 
-    subcommand, explicit_config = _parse_args()
+    subcommand, options = _parse_args()
+
+    # --- Manager subcommands ---
+    if subcommand in ("start-all", "status", "stop-all", "install-service", "uninstall-service"):
+        from disco_agent.manager import (
+            Manager,
+            parse_instances_config,
+            show_status,
+            stop_all,
+            _default_instances_path,
+        )
+
+        instances_path = options.get("instances", _default_instances_path())
+
+        if subcommand == "start-all":
+            cfg = parse_instances_config(instances_path)
+            only = options.get("only")
+            if only:
+                cfg.instances = [i for i in cfg.instances if i.name == only]
+                if not cfg.instances:
+                    print(f"No instance named '{only}' found in {instances_path}")
+                    sys.exit(1)
+
+            manager = Manager(cfg)
+
+            if sys.platform != "win32":
+                import signal as sig
+                loop = asyncio.get_event_loop()
+                for s in (sig.SIGINT, sig.SIGTERM):
+                    loop.add_signal_handler(s, manager.shutdown)
+                asyncio.run(manager.run())
+            else:
+                # Windows: handle Ctrl+C via KeyboardInterrupt
+                try:
+                    asyncio.run(manager.run())
+                except KeyboardInterrupt:
+                    manager.shutdown()
+
+        elif subcommand == "status":
+            state_path = instances_path.parent / "manager-state.json"
+            show_status(state_path)
+
+        elif subcommand == "stop-all":
+            pid_path = instances_path.parent / "manager.pid"
+            stop_all(pid_path)
+
+        elif subcommand in ("install-service", "uninstall-service"):
+            from disco_agent.service import install_service, uninstall_service
+            if subcommand == "install-service":
+                install_service(instances_path)
+            else:
+                uninstall_service()
+
+        return
+
+    # --- Single-instance subcommands (existing behavior) ---
+    explicit_config = options.get("config")
 
     if explicit_config:
         # Explicit config: derive .env from same directory

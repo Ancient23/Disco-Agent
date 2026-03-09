@@ -294,3 +294,47 @@ def test_stop_all_sends_signal(tmp_path):
 
     # Should not raise even if process doesn't exist
     stop_all(pid_file)
+
+
+def test_parse_args_start_all(monkeypatch):
+    """start-all subcommand should be parsed with --instances and --only."""
+    monkeypatch.setattr("sys.argv", ["disco-agent", "start-all", "--instances", "/tmp/i.toml", "--only", "proj-a"])
+    from disco_agent.daemon import _parse_args
+    sub, opts = _parse_args()
+    assert sub == "start-all"
+    assert opts["instances"] == Path("/tmp/i.toml")
+    assert opts["only"] == "proj-a"
+
+
+def test_parse_args_status(monkeypatch):
+    """status subcommand should be recognized."""
+    monkeypatch.setattr("sys.argv", ["disco-agent", "status"])
+    from disco_agent.daemon import _parse_args
+    sub, opts = _parse_args()
+    assert sub == "status"
+
+
+def test_parse_args_stop_all(monkeypatch):
+    """stop-all subcommand should be recognized."""
+    monkeypatch.setattr("sys.argv", ["disco-agent", "stop-all"])
+    from disco_agent.daemon import _parse_args
+    sub, opts = _parse_args()
+    assert sub == "stop-all"
+
+
+def test_parse_args_existing_start(monkeypatch):
+    """Existing start subcommand with --config should still work."""
+    monkeypatch.setattr("sys.argv", ["disco-agent", "start", "--config", "/tmp/c.toml"])
+    from disco_agent.daemon import _parse_args
+    sub, opts = _parse_args()
+    assert sub == "start"
+    assert opts["config"] == Path("/tmp/c.toml")
+
+
+def test_parse_args_default_start(monkeypatch):
+    """No subcommand defaults to start."""
+    monkeypatch.delenv("DISCO_AGENT_CONFIG", raising=False)
+    monkeypatch.setattr("sys.argv", ["disco-agent"])
+    from disco_agent.daemon import _parse_args
+    sub, opts = _parse_args()
+    assert sub == "start"
