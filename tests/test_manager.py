@@ -1,3 +1,5 @@
+import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -338,3 +340,91 @@ def test_parse_args_default_start(monkeypatch):
     from disco_agent.daemon import _parse_args
     sub, opts = _parse_args()
     assert sub == "start"
+
+
+async def test_manager_handles_shutdown_cleanly(tmp_path):
+    """Manager should shut down cleanly when shutdown() is called."""
+    from disco_agent.manager import InstanceConfig, InstancesConfig, Manager
+
+    script = tmp_path / "sleeper.py"
+    script.write_text("import time\nwhile True:\n    time.sleep(0.1)")
+
+    cfg = InstancesConfig(
+        disco_agent_root=str(tmp_path),
+        base_dir=tmp_path,
+        instances=[InstanceConfig(name="sig-test", config_path=tmp_path / "a.toml")],
+    )
+
+    manager = Manager(cfg)
+    manager._build_cmd = lambda inst: [sys.executable, str(script)]
+
+    task = asyncio.create_task(manager.run())
+    await asyncio.sleep(0.5)
+
+    # Simulate shutdown signal
+    manager.shutdown()
+    await asyncio.wait_for(task, timeout=15)
+
+    runner = manager.runners["sig-test"]
+    assert runner.process and runner.process.returncode is not None
+
+
+async def test_full_round_trip(tmp_path):
+    """Integration: parse instances.toml, build env, start manager, verify state, stop."""
+    from disco_agent.manager import Manager, parse_instances_config
+
+    # Create instance configs
+    inst_dir = tmp_path / "instances" / "test-proj"
+    inst_dir.mkdir(parents=True)
+
+    config_toml = inst_dir / "config.toml"
+    config_toml.write_text("[general]\n[discord]\n[budgets]\n")
+
+    global_env = tmp_path / ".env"
+    global_env.write_text("DISCORD_BOT_TOKEN=test-tok\nGLOBAL_VAR=yes\n")
+
+    inst_env = inst_dir / ".env"
+    inst_env.write_text("INSTANCE_VAR=also_yes\n")
+
+    root_str = str(tmp_path).replace("\\", "/")
+    instances_toml = tmp_path / "instances.toml"
+    instances_toml.write_text(
+        f'disco_agent_root = "{root_str}"\n\n'
+        f'[[instances]]\nname = "test-proj"\nconfig = "instances/test-proj/config.toml"\n'
+    )
+
+    cfg = parse_instances_config(instances_toml)
+    assert cfg.disco_agent_root == root_str
+    assert len(cfg.instances) == 1
+    assert cfg.instances[0].name == "test-proj"
+
+    # Create a script that prints env vars and sleeps briefly
+    script = tmp_path / "env_printer.py"
+    script.write_text(
+        "import os, time\n"
+        "print(f'TOKEN={os.environ.get(\"DISCORD_BOT_TOKEN\", \"missing\")}')\n"
+        "print(f'ROOT={os.environ.get(\"DISCO_AGENT_ROOT\", \"missing\")}')\n"
+        "time.sleep(1)\n"
+    )
+
+    manager = Manager(cfg)
+    manager._build_cmd = lambda inst: [sys.executable, str(script)]
+
+    task = asyncio.create_task(manager.run())
+    await asyncio.sleep(2)
+
+    # Verify state file was written
+    state_path = tmp_path / "manager-state.json"
+    assert state_path.exists()
+    state = json.loads(state_path.read_text())
+    assert "test-proj" in state["instances"]
+
+    # Verify PID file was written
+    pid_path = tmp_path / "manager.pid"
+    assert pid_path.exists()
+
+    manager.shutdown()
+    await asyncio.wait_for(task, timeout=15)
+
+    # PID file should be cleaned up after shutdown
+    assert not pid_path.exists()
