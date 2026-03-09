@@ -6,6 +6,7 @@ import logging
 import os
 import signal
 import sys
+import time
 import tomllib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -13,6 +14,9 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_BACKOFF_SEQUENCE = [1, 5, 30, 60]
+_HEALTHY_THRESHOLD_SECONDS = 300  # 5 minutes
 
 
 @dataclass
@@ -158,3 +162,32 @@ class InstanceRunner:
     def kill(self) -> None:
         if self.process and self.process.returncode is None:
             self.process.kill()
+
+
+class RestartTracker:
+    """Tracks restart attempts with exponential backoff."""
+
+    def __init__(self):
+        self._index = 0
+        self.restart_count = 0
+        self._last_start: float | None = None
+
+    def next_delay(self) -> int:
+        """Return the next backoff delay in seconds and increment restart count."""
+        self.restart_count += 1
+        delay = _BACKOFF_SEQUENCE[min(self._index, len(_BACKOFF_SEQUENCE) - 1)]
+        self._index += 1
+        return delay
+
+    def mark_started(self) -> None:
+        """Record when the instance was started."""
+        self._last_start = time.monotonic()
+
+    def check_healthy(self) -> None:
+        """If the instance has been running longer than the threshold, reset backoff."""
+        if self._last_start and (time.monotonic() - self._last_start) >= _HEALTHY_THRESHOLD_SECONDS:
+            self.mark_healthy()
+
+    def mark_healthy(self) -> None:
+        """Reset backoff to initial state."""
+        self._index = 0

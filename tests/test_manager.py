@@ -188,3 +188,28 @@ async def test_spawn_instance_returns_exit_code(tmp_path):
     await runner.start()
     code = await runner.wait()
     assert code == 42
+
+
+async def test_backoff_sequence():
+    """Backoff should progress: 1, 5, 30, 60, 60, ... and reset after healthy period."""
+    from disco_agent.manager import RestartTracker
+
+    tracker = RestartTracker()
+    assert tracker.next_delay() == 1
+    assert tracker.next_delay() == 5
+    assert tracker.next_delay() == 30
+    assert tracker.next_delay() == 60
+    assert tracker.next_delay() == 60  # caps at 60
+
+    tracker.mark_healthy()  # reset
+    assert tracker.next_delay() == 1
+
+
+async def test_restart_tracker_counts_restarts():
+    """RestartTracker should count total restarts."""
+    from disco_agent.manager import RestartTracker
+
+    tracker = RestartTracker()
+    tracker.next_delay()
+    tracker.next_delay()
+    assert tracker.restart_count == 2
