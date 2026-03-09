@@ -213,3 +213,39 @@ async def test_restart_tracker_counts_restarts():
     tracker.next_delay()
     tracker.next_delay()
     assert tracker.restart_count == 2
+
+
+async def test_manager_starts_and_stops_instances(tmp_path):
+    """Manager should start instances and stop them on shutdown."""
+    import asyncio
+
+    from disco_agent.manager import InstanceConfig, InstancesConfig, Manager
+
+    # Create a script that sleeps until terminated
+    script = tmp_path / "sleeper.py"
+    script.write_text("import time\nwhile True:\n    time.sleep(0.1)")
+
+    instances_cfg = InstancesConfig(
+        disco_agent_root=str(tmp_path),
+        base_dir=tmp_path,
+        instances=[
+            InstanceConfig(name="inst-a", config_path=tmp_path / "a.toml"),
+            InstanceConfig(name="inst-b", config_path=tmp_path / "b.toml"),
+        ],
+    )
+
+    manager = Manager(instances_cfg)
+    # Override the command builder to use our sleeper script
+    manager._build_cmd = lambda inst: [sys.executable, str(script)]
+
+    # Start manager, wait briefly, then signal shutdown
+    task = asyncio.create_task(manager.run())
+    await asyncio.sleep(0.5)
+
+    assert len(manager.runners) == 2
+    assert all(r.process and r.process.returncode is None for r in manager.runners.values())
+
+    manager.shutdown()
+    await asyncio.wait_for(task, timeout=15)
+
+    assert all(r.process and r.process.returncode is not None for r in manager.runners.values())

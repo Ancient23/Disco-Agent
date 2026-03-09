@@ -191,3 +191,121 @@ class RestartTracker:
     def mark_healthy(self) -> None:
         """Reset backoff to initial state."""
         self._index = 0
+
+
+class Manager:
+    """Orchestrates multiple disco-agent instances."""
+
+    def __init__(self, config: InstancesConfig):
+        self.config = config
+        self.runners: dict[str, InstanceRunner] = {}
+        self._trackers: dict[str, RestartTracker] = {}
+        self._shutdown = asyncio.Event()
+        self._state_path = config.base_dir / "manager-state.json"
+        self._pid_path = config.base_dir / "manager.pid"
+
+    def _build_cmd(self, instance: InstanceConfig) -> list[str]:
+        return [sys.executable, "-m", "disco_agent.daemon", "start", "--config", str(instance.config_path)]
+
+    def _build_env(self, instance: InstanceConfig) -> dict[str, str]:
+        global_env_path = self.config.base_dir / ".env"
+        env = build_instance_env(global_env_path, instance.env_path)
+        if self.config.disco_agent_root:
+            env["DISCO_AGENT_ROOT"] = self.config.disco_agent_root
+        return env
+
+    async def run(self) -> None:
+        """Start all instances and monitor them until shutdown."""
+        self._write_pid()
+
+        try:
+            tasks = []
+            for inst in self.config.instances:
+                tasks.append(asyncio.create_task(self._run_instance(inst)))
+
+            await self._shutdown.wait()
+
+            # Terminate all children
+            for runner in self.runners.values():
+                runner.terminate()
+
+            # Wait up to 10s for graceful exit
+            for name, runner in self.runners.items():
+                try:
+                    await asyncio.wait_for(runner.wait(), timeout=10)
+                except asyncio.TimeoutError:
+                    logger.warning("Instance '%s' did not exit gracefully, killing", name)
+                    runner.kill()
+                    await runner.wait()
+
+            for t in tasks:
+                t.cancel()
+                try:
+                    await t
+                except asyncio.CancelledError:
+                    pass
+        finally:
+            self._remove_pid()
+            self._write_state()
+
+    async def _run_instance(self, instance: InstanceConfig) -> None:
+        """Run a single instance with auto-restart."""
+        tracker = RestartTracker()
+        self._trackers[instance.name] = tracker
+
+        while not self._shutdown.is_set():
+            cmd = self._build_cmd(instance)
+            env = self._build_env(instance)
+
+            runner = InstanceRunner(name=instance.name, cmd=cmd, env=env)
+            self.runners[instance.name] = runner
+
+            tracker.mark_started()
+            await runner.start()
+            self._write_state()
+
+            exit_code = await runner.wait()
+
+            if self._shutdown.is_set():
+                break
+
+            tracker.check_healthy()
+            delay = tracker.next_delay()
+            logger.warning(
+                "Instance '%s' exited (code=%s). Restarting in %ds (attempt #%d)",
+                instance.name, exit_code, delay, tracker.restart_count,
+            )
+            self._write_state()
+
+            try:
+                await asyncio.wait_for(self._shutdown.wait(), timeout=delay)
+                break  # shutdown requested during backoff
+            except asyncio.TimeoutError:
+                pass  # backoff elapsed, restart
+
+    def shutdown(self) -> None:
+        self._shutdown.set()
+
+    def _write_pid(self) -> None:
+        self._pid_path.parent.mkdir(parents=True, exist_ok=True)
+        self._pid_path.write_text(str(os.getpid()))
+
+    def _remove_pid(self) -> None:
+        self._pid_path.unlink(missing_ok=True)
+
+    def _write_state(self) -> None:
+        state = {
+            "pid": os.getpid(),
+            "started": datetime.now(timezone.utc).isoformat(),
+            "instances": {},
+        }
+        for name, runner in self.runners.items():
+            tracker = self._trackers.get(name)
+            proc = runner.process
+            state["instances"][name] = {
+                "pid": proc.pid if proc else None,
+                "status": "running" if proc and proc.returncode is None else "stopped",
+                "restarts": tracker.restart_count if tracker else 0,
+            }
+        self._state_path.parent.mkdir(parents=True, exist_ok=True)
+        self._state_path.write_text(json.dumps(state, indent=2))
