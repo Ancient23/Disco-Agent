@@ -75,6 +75,12 @@ def _load_code_plugin(plugin: dict[str, Any], config_dir: str, plugin_configs: d
     spec = importlib.util.spec_from_file_location(module_name, str(workflows_file))
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
+
+    # Add config_dir (repo root) to sys.path so absolute imports like
+    # "from plugins.ue.config import ..." resolve correctly.
+    if config_dir not in sys.path:
+        sys.path.insert(0, config_dir)
+
     spec.loader.exec_module(module)
 
     # Pass plugin config if available
