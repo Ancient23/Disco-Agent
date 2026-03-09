@@ -309,3 +309,44 @@ class Manager:
             }
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
         self._state_path.write_text(json.dumps(state, indent=2))
+
+
+def show_status(state_path: Path) -> None:
+    """Pretty-print the manager state from the JSON file."""
+    if not state_path.exists():
+        print("Manager is not running (no state file found).")
+        return
+
+    state = json.loads(state_path.read_text())
+    print(f"Manager PID: {state['pid']}")
+    print(f"Started: {state['started']}")
+    print()
+    print(f"{'Instance':<20} {'PID':<10} {'Status':<10} {'Restarts':<10}")
+    print("-" * 50)
+    for name, info in state.get("instances", {}).items():
+        print(f"{name:<20} {str(info.get('pid', '-')):<10} {info['status']:<10} {info['restarts']:<10}")
+
+
+def stop_all(pid_path: Path) -> None:
+    """Read the manager PID file and send a termination signal."""
+    if not pid_path.exists():
+        print("No manager PID file found. Is the manager running?")
+        return
+
+    pid = int(pid_path.read_text().strip())
+    try:
+        if sys.platform == "win32":
+            os.kill(pid, signal.SIGTERM)
+        else:
+            os.kill(pid, signal.SIGTERM)
+        print(f"Sent termination signal to manager (PID {pid}).")
+    except ProcessLookupError:
+        print(f"Manager process (PID {pid}) not found. Cleaning up PID file.")
+        pid_path.unlink(missing_ok=True)
+    except PermissionError:
+        print(f"Permission denied sending signal to PID {pid}.")
+    except OSError:
+        # On Windows, os.kill may raise OSError instead of ProcessLookupError
+        # for non-existent PIDs.
+        print(f"Manager process (PID {pid}) not found. Cleaning up PID file.")
+        pid_path.unlink(missing_ok=True)

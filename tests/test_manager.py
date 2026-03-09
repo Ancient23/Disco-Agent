@@ -249,3 +249,48 @@ async def test_manager_starts_and_stops_instances(tmp_path):
     await asyncio.wait_for(task, timeout=15)
 
     assert all(r.process and r.process.returncode is not None for r in manager.runners.values())
+
+
+def test_show_status_reads_state_file(tmp_path, capsys):
+    """show_status should pretty-print the manager-state.json contents."""
+    import json
+
+    from disco_agent.manager import show_status
+
+    state = {
+        "pid": 12345,
+        "started": "2026-03-08T17:00:00+00:00",
+        "instances": {
+            "proj-a": {"pid": 12346, "status": "running", "restarts": 0},
+            "proj-b": {"pid": 12347, "status": "running", "restarts": 2},
+        },
+    }
+    state_file = tmp_path / "manager-state.json"
+    state_file.write_text(json.dumps(state))
+
+    show_status(state_file)
+
+    output = capsys.readouterr().out
+    assert "proj-a" in output
+    assert "running" in output
+    assert "proj-b" in output
+
+
+def test_show_status_missing_file(tmp_path, capsys):
+    """show_status should print a message when no state file exists."""
+    from disco_agent.manager import show_status
+
+    show_status(tmp_path / "nope.json")
+    output = capsys.readouterr().out
+    assert "not running" in output.lower()
+
+
+def test_stop_all_sends_signal(tmp_path):
+    """stop_all should read PID file and attempt to terminate the process."""
+    from disco_agent.manager import stop_all
+
+    pid_file = tmp_path / "manager.pid"
+    pid_file.write_text("99999999")  # non-existent PID
+
+    # Should not raise even if process doesn't exist
+    stop_all(pid_file)
