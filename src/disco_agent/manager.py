@@ -127,6 +127,7 @@ class InstanceRunner:
         self.cmd = cmd
         self.env = env
         self.process: asyncio.subprocess.Process | None = None
+        self._output_task: asyncio.Task[None] | None = None
         self.on_output: Any = None  # callback(line: str)
 
     async def start(self) -> None:
@@ -136,7 +137,7 @@ class InstanceRunner:
             stderr=asyncio.subprocess.STDOUT,
             env=self.env,
         )
-        asyncio.create_task(self._read_output())
+        self._output_task = asyncio.create_task(self._read_output())
 
     async def _read_output(self) -> None:
         assert self.process and self.process.stdout
@@ -153,7 +154,10 @@ class InstanceRunner:
 
     async def wait(self) -> int:
         assert self.process
-        return await self.process.wait()
+        code = await self.process.wait()
+        if self._output_task is not None:
+            await self._output_task
+        return code
 
     def terminate(self) -> None:
         if self.process and self.process.returncode is None:
@@ -203,6 +207,7 @@ class Manager:
         self._shutdown = asyncio.Event()
         self._state_path = config.base_dir / "manager-state.json"
         self._pid_path = config.base_dir / "manager.pid"
+        self._started_at: str | None = None
 
     def _build_cmd(self, instance: InstanceConfig) -> list[str]:
         return [sys.executable, "-m", "disco_agent.daemon", "start", "--config", str(instance.config_path)]
@@ -216,6 +221,12 @@ class Manager:
 
     async def run(self) -> None:
         """Start all instances and monitor them until shutdown."""
+        loop = asyncio.get_running_loop()
+        if sys.platform != "win32":
+            for s in (signal.SIGINT, signal.SIGTERM):
+                loop.add_signal_handler(s, self.shutdown)
+
+        self._started_at = datetime.now(timezone.utc).isoformat()
         self._write_pid()
 
         try:
@@ -296,7 +307,7 @@ class Manager:
     def _write_state(self) -> None:
         state = {
             "pid": os.getpid(),
-            "started": datetime.now(timezone.utc).isoformat(),
+            "started": self._started_at or datetime.now(timezone.utc).isoformat(),
             "instances": {},
         }
         for name, runner in self.runners.items():
@@ -335,10 +346,7 @@ def stop_all(pid_path: Path) -> None:
 
     pid = int(pid_path.read_text().strip())
     try:
-        if sys.platform == "win32":
-            os.kill(pid, signal.SIGTERM)
-        else:
-            os.kill(pid, signal.SIGTERM)
+        os.kill(pid, signal.SIGTERM)
         print(f"Sent termination signal to manager (PID {pid}).")
     except ProcessLookupError:
         print(f"Manager process (PID {pid}) not found. Cleaning up PID file.")

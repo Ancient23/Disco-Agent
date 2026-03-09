@@ -195,18 +195,14 @@ def main():
 
             manager = Manager(cfg)
 
-            if sys.platform != "win32":
+            # Unix signal handlers are registered inside Manager.run()
+            # via loop.add_signal_handler(). On Windows, we use
+            # signal.signal() so shutdown is called while the loop is
+            # still alive (KeyboardInterrupt fires too late).
+            if sys.platform == "win32":
                 import signal as sig
-                loop = asyncio.get_event_loop()
-                for s in (sig.SIGINT, sig.SIGTERM):
-                    loop.add_signal_handler(s, manager.shutdown)
-                asyncio.run(manager.run())
-            else:
-                # Windows: handle Ctrl+C via KeyboardInterrupt
-                try:
-                    asyncio.run(manager.run())
-                except KeyboardInterrupt:
-                    manager.shutdown()
+                sig.signal(sig.SIGINT, lambda s, f: manager.shutdown())
+            asyncio.run(manager.run())
 
         elif subcommand == "status":
             state_path = instances_path.parent / "manager-state.json"
