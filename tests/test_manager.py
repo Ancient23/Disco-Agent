@@ -269,20 +269,22 @@ def test_show_status_reads_state_file(tmp_path, capsys):
     }
     state_file = tmp_path / "manager-state.json"
     state_file.write_text(json.dumps(state))
+    pid_file = tmp_path / "manager.pid"
 
-    show_status(state_file)
+    show_status(state_file, pid_file)
 
     output = capsys.readouterr().out
     assert "proj-a" in output
     assert "running" in output
     assert "proj-b" in output
+    assert "not running (stale state)" in output
 
 
 def test_show_status_missing_file(tmp_path, capsys):
     """show_status should print a message when no state file exists."""
     from disco_agent.manager import show_status
 
-    show_status(tmp_path / "nope.json")
+    show_status(tmp_path / "nope.json", tmp_path / "manager.pid")
     output = capsys.readouterr().out
     assert "not running" in output.lower()
 

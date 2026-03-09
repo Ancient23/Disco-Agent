@@ -230,11 +230,32 @@ class Manager:
         self._write_pid()
 
         try:
-            tasks = []
+            tasks: dict[str, asyncio.Task[None]] = {}
             for inst in self.config.instances:
-                tasks.append(asyncio.create_task(self._run_instance(inst)))
+                tasks[inst.name] = asyncio.create_task(
+                    self._run_instance(inst), name=f"instance-{inst.name}"
+                )
 
-            await self._shutdown.wait()
+            # Monitor tasks: if all die, shut down the manager
+            while not self._shutdown.is_set():
+                done, pending = await asyncio.wait(
+                    [asyncio.create_task(self._shutdown.wait()), *tasks.values()],
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                # Check if shutdown was requested
+                if self._shutdown.is_set():
+                    break
+                # Log any tasks that finished with exceptions
+                for t in done:
+                    if t in tasks.values() and t.done() and t.exception():
+                        logger.error(
+                            "Instance task '%s' failed: %s", t.get_name(), t.exception()
+                        )
+                # If all instance tasks are dead, shut down
+                if all(t.done() for t in tasks.values()):
+                    logger.error("All instance tasks have exited. Shutting down manager.")
+                    self.shutdown()
+                    break
 
             # Terminate all children
             for runner in self.runners.values():
@@ -249,7 +270,7 @@ class Manager:
                     runner.kill()
                     await runner.wait()
 
-            for t in tasks:
+            for t in tasks.values():
                 t.cancel()
                 try:
                     await t
@@ -271,11 +292,16 @@ class Manager:
             runner = InstanceRunner(name=instance.name, cmd=cmd, env=env)
             self.runners[instance.name] = runner
 
-            tracker.mark_started()
-            await runner.start()
-            self._write_state()
+            try:
+                tracker.mark_started()
+                await runner.start()
+                self._write_state()
 
-            exit_code = await runner.wait()
+                exit_code = await runner.wait()
+            except Exception:
+                logger.exception("Instance '%s' failed to start or crashed", instance.name)
+                exit_code = -1
+                self._write_state()
 
             if self._shutdown.is_set():
                 break
@@ -322,14 +348,31 @@ class Manager:
         self._state_path.write_text(json.dumps(state, indent=2))
 
 
-def show_status(state_path: Path) -> None:
+def _is_pid_alive(pid: int) -> bool:
+    """Check whether a process with the given PID is still running."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except (ProcessLookupError, OSError):
+        return False
+    except PermissionError:
+        return True  # process exists but we can't signal it
+
+
+def show_status(state_path: Path, pid_path: Path) -> None:
     """Pretty-print the manager state from the JSON file."""
     if not state_path.exists():
         print("Manager is not running (no state file found).")
         return
 
     state = json.loads(state_path.read_text())
-    print(f"Manager PID: {state['pid']}")
+    manager_pid = state.get("pid")
+
+    # Check if the manager process is actually alive
+    alive = manager_pid is not None and _is_pid_alive(manager_pid)
+    status_label = "running" if alive else "not running (stale state)"
+
+    print(f"Manager PID: {manager_pid} ({status_label})")
     print(f"Started: {state['started']}")
     print()
     print(f"{'Instance':<20} {'PID':<10} {'Status':<10} {'Restarts':<10}")
@@ -344,7 +387,13 @@ def stop_all(pid_path: Path) -> None:
         print("No manager PID file found. Is the manager running?")
         return
 
-    pid = int(pid_path.read_text().strip())
+    raw = pid_path.read_text().strip()
+    try:
+        pid = int(raw)
+    except ValueError:
+        print(f"Corrupt PID file (contents: {raw!r}). Removing it.")
+        pid_path.unlink(missing_ok=True)
+        return
     try:
         os.kill(pid, signal.SIGTERM)
         print(f"Sent termination signal to manager (PID {pid}).")

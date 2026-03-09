@@ -206,7 +206,8 @@ def main():
 
         elif subcommand == "status":
             state_path = instances_path.parent / "manager-state.json"
-            show_status(state_path)
+            pid_path = instances_path.parent / "manager.pid"
+            show_status(state_path, pid_path)
 
         elif subcommand == "stop-all":
             pid_path = instances_path.parent / "manager.pid"

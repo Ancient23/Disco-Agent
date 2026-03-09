@@ -1,7 +1,5 @@
 # Multi-Instance Manager Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Add a subprocess-based multi-instance daemon manager so users can run multiple disco-agent instances from a single CLI, with auto-restart, status monitoring, and cross-platform service installation.
 
 **Architecture:** A new `manager.py` module spawns `disco-agent start --config <path>` subprocesses for each instance defined in `~/.disco-agent/instances.toml`. The existing `daemon.py` arg parser is extended with new subcommands (`start-all`, `status`, `stop-all`, `install-service`, `uninstall-service`). Plugin path resolution gains `DISCO_AGENT_ROOT` env var support.

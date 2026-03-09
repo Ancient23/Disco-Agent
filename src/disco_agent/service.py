@@ -15,7 +15,12 @@ def _launch_agents_dir() -> Path:
 
 
 def _run_cmd(cmd: list[str]) -> None:
-    subprocess.run(cmd, check=False)
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        stderr = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(
+            f"Command failed (exit {result.returncode}): {' '.join(cmd)}\n{stderr}"
+        )
 
 
 def _find_disco_agent_exe() -> str:
@@ -66,7 +71,7 @@ def _install_macos(instances_path: Path) -> None:
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <false/>
+    <true/>
     <key>StandardOutPath</key>
     <string>{log_path}</string>
     <key>StandardErrorPath</key>
