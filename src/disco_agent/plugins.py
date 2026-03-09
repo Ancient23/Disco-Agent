@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -63,7 +64,9 @@ def _load_code_plugin(plugin: dict[str, Any], config_dir: str, plugin_configs: d
     """Load a code plugin by importing its workflows.py module."""
     plugin_path = Path(plugin["path"])
     if not plugin_path.is_absolute():
-        plugin_path = Path(config_dir) / plugin_path
+        disco_root = os.environ.get("DISCO_AGENT_ROOT", "")
+        base = Path(disco_root) if disco_root else Path(config_dir)
+        plugin_path = base / plugin_path
 
     workflows_file = plugin_path / "workflows.py"
     if not workflows_file.exists():
@@ -76,10 +79,12 @@ def _load_code_plugin(plugin: dict[str, Any], config_dir: str, plugin_configs: d
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
 
-    # Add config_dir (repo root) to sys.path so absolute imports like
+    # Add the root directory to sys.path so absolute imports like
     # "from plugins.ue.config import ..." resolve correctly.
-    if config_dir not in sys.path:
-        sys.path.insert(0, config_dir)
+    disco_root_env = os.environ.get("DISCO_AGENT_ROOT", "")
+    path_root = disco_root_env if disco_root_env else config_dir
+    if path_root not in sys.path:
+        sys.path.insert(0, path_root)
 
     spec.loader.exec_module(module)
 

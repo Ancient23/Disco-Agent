@@ -151,3 +151,72 @@ def test_plugin_config_passed_to_code_plugin(tmp_path):
 
     module = sys.modules["disco_agent_plugin_configurable"]
     assert module._received_config == {"api_key": "secret123", "timeout": 30}
+
+
+def test_code_plugin_resolves_path_from_disco_agent_root(tmp_path, monkeypatch):
+    """When DISCO_AGENT_ROOT is set, relative plugin paths resolve against it."""
+    # Create the plugin under a "root" directory that is NOT config_dir
+    root_dir = tmp_path / "agent_root"
+    root_dir.mkdir()
+    plugin_dir = root_dir / "plugins" / "myplugin"
+    plugin_dir.mkdir(parents=True)
+    workflows_file = plugin_dir / "workflows.py"
+    workflows_file.write_text(
+        textwrap.dedent("""\
+            from disco_agent.workflows import register
+            from disco_agent.workflows.base import BaseWorkflow, WorkflowResult
+
+            @register("root_cmd")
+            class RootCmdWorkflow(BaseWorkflow):
+                async def execute(self):
+                    return WorkflowResult(success=True, output="from root")
+        """)
+    )
+
+    # config_dir points somewhere else entirely
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    monkeypatch.setenv("DISCO_AGENT_ROOT", str(root_dir))
+
+    plugins = [
+        {
+            "name": "myplugin",
+            "type": "code",
+            "path": "plugins/myplugin",  # relative path
+        }
+    ]
+    load_plugins(plugins, {}, str(config_dir))
+
+    assert "root_cmd" in WORKFLOW_REGISTRY
+
+
+def test_code_plugin_falls_back_to_config_dir_without_env(tmp_path, monkeypatch):
+    """Without DISCO_AGENT_ROOT, relative paths resolve against config_dir."""
+    monkeypatch.delenv("DISCO_AGENT_ROOT", raising=False)
+
+    plugin_dir = tmp_path / "plugins" / "fallback"
+    plugin_dir.mkdir(parents=True)
+    workflows_file = plugin_dir / "workflows.py"
+    workflows_file.write_text(
+        textwrap.dedent("""\
+            from disco_agent.workflows import register
+            from disco_agent.workflows.base import BaseWorkflow, WorkflowResult
+
+            @register("fallback_cmd")
+            class FallbackCmdWorkflow(BaseWorkflow):
+                async def execute(self):
+                    return WorkflowResult(success=True, output="fallback")
+        """)
+    )
+
+    plugins = [
+        {
+            "name": "fallback",
+            "type": "code",
+            "path": "plugins/fallback",  # relative path
+        }
+    ]
+    load_plugins(plugins, {}, str(tmp_path))
+
+    assert "fallback_cmd" in WORKFLOW_REGISTRY
