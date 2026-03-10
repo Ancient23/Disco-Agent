@@ -117,7 +117,10 @@ class DiscordNotifier:
         thread = self.bot.get_channel(int(thread_id))
         if not thread:
             return ""
-        msg = await thread.send(truncate_for_discord(message))
+        content = truncate_for_discord(message)
+        if not content or not content.strip():
+            return ""
+        msg = await thread.send(content)
         return str(msg.id)
 
     async def edit_message(self, thread_id: str, message_id: str, new_content: str) -> None:

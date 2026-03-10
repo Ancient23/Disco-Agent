@@ -53,7 +53,7 @@ class StreamingDiscordMessage:
 
     async def flush(self) -> None:
         """Send or edit the Discord message with the current buffer."""
-        if not self._buffer:
+        if not self._buffer or not self._buffer.strip():
             return
         content = self._buffer[: self._max_length]
         if self._current_msg is None:
