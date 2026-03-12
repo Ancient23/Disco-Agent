@@ -116,6 +116,7 @@ class DiscordNotifier:
         """Send a message to a thread. Returns message ID as string."""
         thread = self.bot.get_channel(int(thread_id))
         if not thread:
+            logger.warning("send_to_thread: thread %s not in cache, cannot send", thread_id)
             return ""
         content = truncate_for_discord(message)
         if not content or not content.strip():
@@ -133,7 +134,10 @@ class DiscordNotifier:
 
     def get_thread(self, thread_id: str):
         """Get a thread channel object for StreamingDiscordMessage."""
-        return self.bot.get_channel(int(thread_id))
+        thread = self.bot.get_channel(int(thread_id))
+        if not thread:
+            logger.warning("get_thread: thread %s not in channel cache", thread_id)
+        return thread
 
 
 def create_bot(config: AgentConfig, queue: TaskQueue, repo_root: str = "") -> discord.Client:
@@ -149,6 +153,12 @@ def create_bot(config: AgentConfig, queue: TaskQueue, repo_root: str = "") -> di
     @bot.event
     async def on_ready():
         logger.info(f"Discord bot connected as {bot.user}")
+        # Re-populate active_threads from guilds so replies work after restart
+        for guild in bot.guilds:
+            for thread in guild.threads:
+                if thread.me is not None:
+                    bot.active_threads[thread.id] = {"name": thread.name}
+        logger.info("Restored %d active thread(s) for reply tracking", len(bot.active_threads))
 
     @bot.event
     async def on_message(message: discord.Message):
@@ -196,6 +206,7 @@ def create_bot(config: AgentConfig, queue: TaskQueue, repo_root: str = "") -> di
                     discord_message_id=str(message.id),
                     requested_by=str(message.author),
                 )
+                await message.channel.send(f"↩️ Queued follow-up (task #{task_id})")
                 logger.info("Thread reply → queued custom task #%d", task_id)
             return
 
